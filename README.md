@@ -7,13 +7,14 @@ Intelligent Cooperative Network**. The goal is to keep your files useful and
 reachable without requiring your own OpenCloud server to stay switched on.
 
 **Development status:** integration in progress, not a working replacement for
-an always-on OpenCloud server. An executable owner-side CLI now imports one
-selected file through authenticated WebDAV, encrypts its contents and source
-metadata, and restores it without contacting the original server. It connects to
-the core's existing private fragment-storage commands. Actual GnuPG encryption
-and repeated recovery pass with a stopped synthetic DAV source; the storage
-adapter is contract-tested separately. A real OpenCloud client and real storage
-peers have **not yet been demonstrated together** in this repository.
+an always-on OpenCloud server. Authorized file import, encryption and repeated
+restoration now pass a real protected-peer trial with the original synthetic
+DAV source stopped and one storage provider offline. A new encrypted catalog
+and authenticated, read-only DAV service make selected files browsable through
+the OpenCloud Web SDK. That SDK-to-peer read path now also passes its own live
+trial: listing, full/range reads, authentication checks and private cleanup with
+the source and one provider offline. This is not yet the full OpenCloud web UI,
+account service, writable synchronization or second-device recovery.
 
 ## One core, private files
 
@@ -88,13 +89,27 @@ restore       Storage providers → verified ciphertext → private owner output
 restore-local Explicit recovery from a locally retained encrypted file
 ```
 
-This is **file recovery**, not an OpenCloud account, synchronization service or
-source-off browsing interface. Names and source versions are encrypted inside
-each object; an encrypted directory catalog and real client integration remain
-next steps. Imports temporarily use private plaintext staging on the owner's
+This command supplies **file recovery**, not an OpenCloud account or
+synchronization service. Names and source versions are encrypted inside each
+object. Imports temporarily use private plaintext staging on the owner's
 device; storage peers never receive that staging data.
 
 [Commands, configuration and recovery boundaries →](docs/PRIVATE_FILES.md)
+
+## Source-off browsing: an encrypted catalog and local read service
+
+`cloud-catalog.mjs` records an explicit owner selection after restoring and
+verifying each file. `cloud-serve.mjs` exposes that immutable private catalog
+through authenticated listing, file reads and ranges on loopback. File reads
+restore from the shared core, verify and decrypt locally, then remove their
+temporary plaintext; the original server is never a fallback.
+
+The actual pinned OpenCloud Web SDK can exercise the DAV interface. This is not
+yet the complete OpenCloud web application, account login, writable sync or
+sharing. The catalog and per-file recovery keys/journals currently remain on
+the owner's device; second-device recovery remains work in progress.
+
+[Run the private read service and see its evidence boundaries →](docs/OFFLINE_READ.md)
 
 ## Development
 
@@ -106,10 +121,27 @@ also use the installed Linux Python 3.11+ and GnuPG tools (`gpg`, `gpg-agent`,
 node --test test/*.test.mjs
 ```
 
-Tests use synthetic loopback WebDAV fixtures and real local GnuPG. They do not
-install OpenCloud, contact an account, enable network participation or alter host
-network settings. Source-off decryption is real; the separate injected storage
-fixture is not evidence of actual peer placement or protected-route restoration.
+Local tests use synthetic loopback WebDAV fixtures and real local GnuPG. They do
+not install OpenCloud, contact an account, enable network participation or alter
+host network settings. The optional actual SDK check requires explicit pinned
+staging. Injected storage fixtures are labelled and are not peer-placement proof.
+
+The separate [protected-peer trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/36909989038)
+passed for Cloud `541cc826fe14ce69cf89a82ecb600ad14dd534c6` and core
+`41e404a40312f039827f761dea7b90be48d0c21f`: authenticated synthetic source import,
+eight encrypted fragment copies on three providers, source and local ciphertext
+removed, provider A offline, two hash-verified recoveries from B/C, complete
+retirement/accounting and unchanged host networking. That trial predates the
+catalog/read-service additions and does not prove the full OpenCloud UI.
+
+The subsequent [SDK-to-peer trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/36916040042)
+passes for Cloud `a67b91fbed42ecd23ba215eb21ef54397fc9f06a` and core
+`5d9d347fc52e4cc13498ed3b6790d1f00de370c3`. Four B/C reconstructions include
+catalog creation and actual SDK reads while source/local ciphertext/provider A
+are unavailable. All 32 required protected MPTCP/TLS exchanges, retained charges,
+all-copy deletion and unchanged host state pass. Exact-source replay of the
+44 original artifacts also passes. Range reads currently restore the whole
+encrypted file before returning the requested bytes.
 
 ## Upstream and licensing
 
