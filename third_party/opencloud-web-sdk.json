@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "package": "@opencloud-eu/web-client",
+  "package_version": "8.0.0",
+  "registry_record": "https://registry.npmjs.org/@opencloud-eu/web-client/8.0.0",
+  "url": "https://registry.npmjs.org/@opencloud-eu/web-client/-/web-client-8.0.0.tgz",
+  "integrity": "sha512-mEuPrrqneX6He552XBaztXAvN1WBDzt5Gis9PMxpOK0p3YcJsEYXIkefAHaRDiwt581pKTfjDW9qm3x/U/zmfw==",
+  "files": 109,
+  "unpacked_bytes": 1109076,
+  "license": "AGPL-3.0",
+  "inspected_source_revision": "11e699ac82fda4dd113ac3ceb2ecb2dd74574045",
+  "source_note": "Published SDK bytes are verified against registry integrity. The matching version source was inspected separately; no reproducible source-to-package build claim.",
+  "purpose": "Explicit optional loopback interoperability trial, not an automatically downloaded or redistributed application runtime."
+}
