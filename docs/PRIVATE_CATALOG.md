@@ -100,9 +100,9 @@ adapter is explicitly an **in-memory core-contract fixture**, not evidence of
 real peer placement, protected routes or independent-device availability.
 
 The production backend always uses the existing core bridge; configuration and
-CLI cannot select that test adapter. A live protected-peer proof of this new
-catalog plus DAV/client path remains separate from earlier one-file storage
-proofs. Catalog replication, second-device key/journal recovery, writable
+CLI cannot select that test adapter. The new catalog, DAV service and actual
+OpenCloud SDK now pass their [own protected-peer proof](OFFLINE_READ.md#evidence-boundaries),
+separately from earlier one-file storage proofs. Catalog replication, second-device key/journal recovery, writable
 sync/conflict handling and shared-access revocation are not implemented here.
 The catalog's local references cannot reconstruct a lost owner device by
 themselves. No second storage ledger or application-specific redundancy policy

@@ -109,9 +109,18 @@ no hidden persistent plaintext cache or claim of optimized performance.
   through that SDK, with the synthetic source stopped and local ciphertext
   removed. Only its core storage adapter is injected; real GPG verification and
   temporary-file cleanup run on every materialized read.
-- Joining the complete catalog/service/client path to actual protected peers
-  is a separate required live proof. The earlier one-file protected storage
-  trial does not by itself prove this new service or server-independent OpenCloud.
+- The separate [live SDK-to-peer trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/36916040042)
+  now passes on Cloud `a67b91fbed42ecd23ba215eb21ef54397fc9f06a` / core
+  `5d9d347fc52e4cc13498ed3b6790d1f00de370c3`, without the injected adapter.
+  The source is stopped, local ciphertext removed and provider A unavailable
+  before four B/C reconstructions: CLI recovery, catalog creation, SDK full GET
+  and SDK range GET. All 32 required protected MPTCP/TLS exchanges complete.
+  Metadata, wrong-token and stale-ETag checks, retained physical charges,
+  all-copy deletion, private cleanup and unchanged host state pass. Exact-source
+  replay reconstructs the aggregate from all 44 original artifacts; ZIP SHA-256
+  `f59a2c2baf693b5087c0827c0971589da23bf15610f96c885db6f2bbe0abdaef`.
+  This proves the SDK/service path, not a running complete web application or
+  server-independent OpenCloud.
 
 See [third-party provenance](../THIRD_PARTY_LICENSES.md) for the exact optional SDK
 and explicit staging procedure. The complete OpenCloud web interface, device

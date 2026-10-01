@@ -11,8 +11,10 @@ an always-on OpenCloud server. Authorized file import, encryption and repeated
 restoration now pass a real protected-peer trial with the original synthetic
 DAV source stopped and one storage provider offline. A new encrypted catalog
 and authenticated, read-only DAV service make selected files browsable through
-the OpenCloud Web SDK. Their local checks and the earlier protected-peer trial
-are separate evidence: the **complete client-to-peer path is still being joined**.
+the OpenCloud Web SDK. That SDK-to-peer read path now also passes its own live
+trial: listing, full/range reads, authentication checks and private cleanup with
+the source and one provider offline. This is not yet the full OpenCloud web UI,
+account service, writable synchronization or second-device recovery.
 
 ## One core, private files
 
@@ -131,6 +133,15 @@ eight encrypted fragment copies on three providers, source and local ciphertext
 removed, provider A offline, two hash-verified recoveries from B/C, complete
 retirement/accounting and unchanged host networking. That trial predates the
 catalog/read-service additions and does not prove the full OpenCloud UI.
+
+The subsequent [SDK-to-peer trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/36916040042)
+passes for Cloud `a67b91fbed42ecd23ba215eb21ef54397fc9f06a` and core
+`5d9d347fc52e4cc13498ed3b6790d1f00de370c3`. Four B/C reconstructions include
+catalog creation and actual SDK reads while source/local ciphertext/provider A
+are unavailable. All 32 required protected MPTCP/TLS exchanges, retained charges,
+all-copy deletion and unchanged host state pass. Exact-source replay of the
+44 original artifacts also passes. Range reads currently restore the whole
+encrypted file before returning the requested bytes.
 
 ## Upstream and licensing
 
