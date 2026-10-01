@@ -7,9 +7,13 @@ Intelligent Cooperative Network**. The goal is to keep your files useful and
 reachable without requiring your own OpenCloud server to stay switched on.
 
 **Development status:** integration in progress, not a working replacement for
-an always-on OpenCloud server. The first component reads explicitly selected
-files through authenticated OpenCloud WebDAV. Distributed storage, recovery and
-source-off browsing still need to be connected and demonstrated together.
+an always-on OpenCloud server. An executable owner-side CLI now imports one
+selected file through authenticated WebDAV, encrypts its contents and source
+metadata, and restores it without contacting the original server. It connects to
+the core's existing private fragment-storage commands. Actual GnuPG encryption
+and repeated recovery pass with a stopped synthetic DAV source; the storage
+adapter is contract-tested separately. A real OpenCloud client and real storage
+peers have **not yet been demonstrated together** in this repository.
 
 ## One core, private files
 
@@ -69,17 +73,43 @@ Further integration points include:
 
 [Architecture, boundaries and remaining work →](docs/ARCHITECTURE.md)
 
+## First executable slice: private file recovery
+
+The new `scripts/cloud-file.mjs` command separates authorized import, storage
+placement and recovery. Only the encrypted file goes to storage peers; the
+per-file recovery key stays with its owner. Restoring never consumes the stored
+copy, contacts the DAV source as a fallback or overwrites an existing output.
+
+```text
+import        Authenticated DAV → owner-private encrypted file and receipt
+create        Encrypted file → core-owned fragment plan and owner journal
+deposit       Encrypted fragments → authorized storage providers
+restore       Storage providers → verified ciphertext → private owner output
+restore-local Explicit recovery from a locally retained encrypted file
+```
+
+This is **file recovery**, not an OpenCloud account, synchronization service or
+source-off browsing interface. Names and source versions are encrypted inside
+each object; an encrypted directory catalog and real client integration remain
+next steps. Imports temporarily use private plaintext staging on the owner's
+device; storage peers never receive that staging data.
+
+[Commands, configuration and recovery boundaries →](docs/PRIVATE_FILES.md)
+
 ## Development
 
-Node.js 24 or newer is required for the current dependency-free adapter tests:
+The dependency-free JavaScript runs on Node.js 24 or newer. Private-file tests
+also use the installed Linux Python 3.11+ and GnuPG tools (`gpg`, `gpg-agent`,
+`gpgconf`); nothing is downloaded or installed automatically:
 
 ```sh
 node --test test/*.test.mjs
 ```
 
-Tests use synthetic loopback WebDAV fixtures. They do not install OpenCloud,
-contact an account, enable network participation or alter host network settings.
-They are adapter checks, not proof of an end-to-end OpenCloud/VOLPAROSSA service.
+Tests use synthetic loopback WebDAV fixtures and real local GnuPG. They do not
+install OpenCloud, contact an account, enable network participation or alter host
+network settings. Source-off decryption is real; the separate injected storage
+fixture is not evidence of actual peer placement or protected-route restoration.
 
 ## Upstream and licensing
 
