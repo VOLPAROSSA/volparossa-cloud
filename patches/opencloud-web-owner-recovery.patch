@@ -1,0 +1,248 @@
+diff --git a/packages/web-pkg/src/composables/download/useDownloadFile.ts b/packages/web-pkg/src/composables/download/useDownloadFile.ts
+index abfb288..e605f4c 100644
+--- a/packages/web-pkg/src/composables/download/useDownloadFile.ts
++++ b/packages/web-pkg/src/composables/download/useDownloadFile.ts
+@@ -2,7 +2,7 @@ import { useClientService } from '../clientService'
+ import { resolveVaultEngine, streamToBlob, triggerDownloadWithFilename } from '../../../src/helpers'
+ import { useGettext } from 'vue3-gettext'
+ import { ClientService } from '../../services'
+-import { useExtensionRegistry, useMessages, useUserStore } from '../piniaStores'
++import { useConfigStore, useExtensionRegistry, useMessages, useUserStore } from '../piniaStores'
+ import { Resource, SpaceResource } from '@opencloud-eu/web-client'
+ import { useGetMatchingSpace } from '../spaces'
+ 
+@@ -17,6 +17,7 @@ export const useDownloadFile = (options?: DownloadFileOptions) => {
+   const { $gettext } = useGettext()
+   const userStore = useUserStore()
+   const extensionRegistry = useExtensionRegistry()
++  const configStore = useConfigStore()
+ 
+   const downloadFile = async (
+     space: SpaceResource = null,
+@@ -28,6 +29,19 @@ export const useDownloadFile = (options?: DownloadFileOptions) => {
+         space = getMatchingSpace(file)
+       }
+ 
++      if (configStore.options.volparossaOwnerRecovery === true) {
++        if (version || file.isFolder) throw new Error('Recovery supports selected current files only')
++        const response = await clientService.webdav.getFileContents(
++          space, { path: file.path }, { responseType: 'arraybuffer' }
++        )
++        const url = URL.createObjectURL(new Blob([response.body as ArrayBuffer], {
++          type: file.mimeType || 'application/octet-stream'
++        }))
++        triggerDownloadWithFilename(url, file.name)
++        setTimeout(() => URL.revokeObjectURL(url), 30000)
++        return
++      }
++
+       // Vault files are stored as ciphertext blobs; the plain download URL
+       // would hand the user an unreadable encrypted file. Get the cleartext
+       // bytes and download those as an in-memory blob instead. Gate on the
+@@ -77,11 +91,11 @@ export const useDownloadFile = (options?: DownloadFileOptions) => {
+       })
+       triggerDownloadWithFilename(url, file.name)
+     } catch (e) {
+-      console.error(e)
++      if (configStore.options.volparossaOwnerRecovery !== true) console.error(e)
+       showErrorMessage({
+         title: $gettext('Download failed'),
+         desc: $gettext('File could not be located'),
+-        errors: [e]
++        errors: configStore.options.volparossaOwnerRecovery ? [] : [e]
+       })
+     }
+   }
+diff --git a/packages/web-pkg/src/composables/piniaStores/config/types.ts b/packages/web-pkg/src/composables/piniaStores/config/types.ts
+index 23c6c51..37be332 100644
+--- a/packages/web-pkg/src/composables/piniaStores/config/types.ts
++++ b/packages/web-pkg/src/composables/piniaStores/config/types.ts
+@@ -26,6 +26,8 @@ const ScriptConfigSchema = z.object({
+ export type ScriptConfig = z.infer<typeof ScriptConfigSchema>
+ 
+ const OptionsConfigSchema = z.object({
++  // Explicit owner-local recovery mode; never an upstream OIDC/account identity.
++  volparossaOwnerRecovery: z.boolean().optional(),
+   announcement: z
+     .object({
+       bannerText: z.string().optional(),
+diff --git a/packages/web-runtime/src/components/Topbar/UserMenu.vue b/packages/web-runtime/src/components/Topbar/UserMenu.vue
+index ca69b9d..b48d6e2 100644
+--- a/packages/web-runtime/src/components/Topbar/UserMenu.vue
++++ b/packages/web-runtime/src/components/Topbar/UserMenu.vue
+@@ -36,7 +36,15 @@
+       class="overflow-hidden"
+     >
+       <oc-list class="user-menu-list">
+-        <template v-if="!user?.onPremisesSamAccountName">
++        <template v-if="configStore.options.volparossaOwnerRecovery">
++          <li class="p-2">Private recovery · Read only</li>
++          <li>
++            <oc-button id="volparossa-recovery-close" appearance="raw" @click="authService.logoutUser()">
++              Close recovery
++            </oc-button>
++          </li>
++        </template>
++        <template v-else-if="!user?.onPremisesSamAccountName">
+           <li class="flex items-center">
+             <oc-button
+               id="oc-topbar-account-manage"
+@@ -150,6 +158,7 @@ import { computed, unref } from 'vue'
+ import {
+   useAuthService,
+   useAuthStore,
++  useConfigStore,
+   UserAvatar,
+   useRoute,
+   useSpacesStore,
+@@ -164,6 +173,7 @@ const themeStore = useThemeStore()
+ const spacesStore = useSpacesStore()
+ const authService = useAuthService()
+ const authStore = useAuthStore()
++const configStore = useConfigStore()
+ 
+ const { user } = storeToRefs(userStore)
+ 
+diff --git a/packages/web-runtime/src/index.ts b/packages/web-runtime/src/index.ts
+index 9e584c0..7bc90c5 100644
+--- a/packages/web-runtime/src/index.ts
++++ b/packages/web-runtime/src/index.ts
+@@ -38,7 +38,87 @@ import { createPinia } from 'pinia'
+ import { extensionPoints } from './extensionPoints'
+ import { extensions } from './extensions'
+ import { usePreferredDark } from '@vueuse/core'
+-import { useThemeStore } from '@opencloud-eu/web-pkg'
++import { useThemeStore, AuthStore, ConfigStore, UserStore } from '@opencloud-eu/web-pkg'
++
++// An explicit, local recovery authority. This small gate supplies an in-memory
++// bearer to the original Files application; it is not an OIDC/account emulator.
++const initializeOwnerRecovery = async (
++  config: ConfigStore, auth: AuthStore, user: UserStore
++) => {
++  if (config.options.volparossaOwnerRecovery !== true) return
++  const origin = window.location.origin
++  if (window.location.protocol !== 'http:' || window.location.hostname !== '127.0.0.1'
++      || new URL(config.serverUrl).origin !== origin
++      || config.apps.length !== 1 || config.apps[0] !== 'files'
++      || config.externalApps.length || config.scripts.length || config.styles.length
++      || config.customTranslations.length) {
++    throw new Error('Owner recovery requires an isolated loopback Files application')
++  }
++  const panel = document.createElement('section')
++  panel.id = 'volparossa-owner-recovery'
++  panel.setAttribute('aria-label', 'VOLPAROSSA private recovery')
++  panel.style.cssText = 'max-width:36rem;margin:5rem auto;padding:2rem;position:relative;z-index:2;background:Canvas;color:CanvasText'
++  const heading = document.createElement('h1')
++  heading.textContent = 'Private recovery · OpenCloud Files'
++  const explanation = document.createElement('p')
++  explanation.textContent = 'Read selected private files through your local VOLPAROSSA service. This is not an OpenCloud account login and does not grant sharing or write access.'
++  const form = document.createElement('form')
++  const label = document.createElement('label')
++  label.textContent = 'Local recovery access token'
++  const input = document.createElement('input')
++  input.id = 'volparossa-recovery-token'
++  input.type = 'password'
++  input.autocomplete = 'off'
++  input.maxLength = 8192
++  input.required = true
++  input.style.cssText = 'display:block;width:100%;margin:1rem 0'
++  label.htmlFor = input.id
++  const button = document.createElement('button')
++  button.type = 'submit'
++  button.textContent = 'Open private files'
++  const status = document.createElement('p')
++  status.setAttribute('role', 'status')
++  form.append(label, input, button, status)
++  panel.append(heading, explanation, form)
++  document.body.append(panel)
++  document.getElementById('splash-loading')?.classList.add('splash-hide')
++  input.focus()
++  await new Promise<void>((resolve) => {
++    form.addEventListener('submit', async (event) => {
++      event.preventDefault()
++      if (button.disabled) return
++      button.disabled = true
++      const token = input.value
++      input.value = ''
++      try {
++        if (!/^[A-Za-z0-9._~+/-]{32,8192}=*$/.test(token)) throw new Error('Invalid token')
++        const response = await fetch(origin + '/volparossa/recovery/session', {
++          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
++          credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(10000)
++        })
++        if (!response.ok) throw new Error('Access refused')
++        const session = await response.json()
++        if (session.version !== 1 || session.authority !== 'owner-local-catalog'
++            || session.readOnly !== true || session.upstreamAccount !== false
++            || session.owner?.id !== 'volparossa-owner-recovery'
++            || session.owner?.displayName !== 'Private recovery') throw new Error('Wrong authority')
++        user.setUser({ id: session.owner.id, displayName: session.owner.displayName })
++        auth.setAccessToken(token)
++        auth.setUserContextReady(true)
++        panel.remove()
++        if (!window.location.hash || window.location.hash === '#/') {
++          window.history.replaceState(null, '', '#/files/spaces/projects')
++        }
++        resolve()
++      } catch {
++        // Never include tokens, response bodies, paths or error objects in logs.
++        status.textContent = 'Local recovery access failed. Check the service and token.'
++        button.disabled = false
++        input.focus()
++      }
++    })
++  })
++}
+ 
+ export const bootstrapApp = async (configurationPath: string, appsReadyCallback: () => void) => {
+   const pinia = createPinia()
+@@ -73,6 +153,7 @@ export const bootstrapApp = async (configurationPath: string, appsReadyCallback:
+   const gettext = announceGettext({ app, availableLanguages: supportedLanguages })
+ 
+   const clientService = announceClientService({ app, configStore, authStore })
++  await initializeOwnerRecovery(configStore, authStore, userStore)
+ 
+   // Registered here (not at router module load) so the guard can receive the
+   // `clientService` it needs to lazy-load mount-point spaces. Registering it
+@@ -118,7 +199,9 @@ export const bootstrapApp = async (configurationPath: string, appsReadyCallback:
+       appProviderService
+     }),
+     announceCapabilities({ capabilityStore, clientService }),
+-    authStore.loadWebfingerDiscoveryData(configStore.serverUrl, clientService.httpUnAuthenticated),
++    ...(configStore.options.volparossaOwnerRecovery ? [] : [
++      authStore.loadWebfingerDiscoveryData(configStore.serverUrl, clientService.httpUnAuthenticated)
++    ]),
+     ...(configStore.apps.includes('external') ? [appProviderService.loadData()] : [])
+   ])
+ 
+diff --git a/packages/web-runtime/src/services/auth/authService.ts b/packages/web-runtime/src/services/auth/authService.ts
+index d6ea81c..949ab11 100644
+--- a/packages/web-runtime/src/services/auth/authService.ts
++++ b/packages/web-runtime/src/services/auth/authService.ts
+@@ -92,6 +92,14 @@ export class AuthService implements AuthServiceInterface {
+    * @param to {Route}
+    */
+   public async initializeContext(to: RouteLocation) {
++    if (this.configStore.options.volparossaOwnerRecovery === true) {
++      // The bootstrap already authenticated the explicit local bearer. Do not
++      // invent an OIDC session, token refresh or original account permissions.
++      if (!this.authStore.userContextReady || !this.authStore.accessToken) {
++        this.hasAuthErrorOccurred = true
++      }
++      return
++    }
+     if (!this.publicLinkManager) {
+       this.publicLinkManager = new PublicLinkManager({
+         clientService: this.clientService,
+@@ -392,6 +400,11 @@ export class AuthService implements AuthServiceInterface {
+   }
+ 
+   public async logoutUser() {
++    if (this.configStore.options.volparossaOwnerRecovery === true) {
++      this.resetStateAfterUserLogout()
++      window.location.reload()
++      return
++    }
+     const endSessionEndpoint = await this.userManager.metadataService?.getEndSessionEndpoint()
+     if (!endSessionEndpoint) {
+       await this.userManager.removeUser()

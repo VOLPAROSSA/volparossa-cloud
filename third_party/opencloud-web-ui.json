@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "repository": "https://github.com/opencloud-eu/web.git",
+  "revision": "11e699ac82fda4dd113ac3ceb2ecb2dd74574045",
+  "tree": "4f13ceee9b21450659266df69a4fac57f25c3bc9",
+  "upstream_version": "8.0.0",
+  "license": "AGPL-3.0",
+  "license_sha256": "76a97c878c9c7a8321bb395c2b44d3fe2f8d81314d219b20138ed0e2dddd5182",
+  "lock_sha256": "f9fd9e4865a3f68094fec7dd509eb20fa695b8e1ca4efc4d6fff209bded1bdb5",
+  "workspace_sha256": "5c5ebfaf322e6eea013e3c2ef5a847e4d6d562171ef785a066bddc83c3024a7a",
+  "patch": "patches/opencloud-web-owner-recovery.patch",
+  "tool": {
+    "package": "pnpm",
+    "version": "11.27.0",
+    "license": "MIT",
+    "url": "https://registry.npmjs.org/pnpm/-/pnpm-11.27.0.tgz",
+    "integrity": "sha512-rRKCFGO7FDKV8fo+zed6a5uXp5kDhtqAD/V7/8OWTcZLexx1WdXb5cM3rqZZ7ZyJN9Q3C9GYyiAJvG+gJJgI5w==",
+    "files": 454,
+    "unpacked_bytes": 20468784,
+    "download_max_bytes": 33554432
+  },
+  "scope": "Explicit owner-local read-only recovery using the actual OpenCloud Files UI. No OIDC, original-account identity, sharing, sync or general server replacement claim."
+}

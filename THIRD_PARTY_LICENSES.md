@@ -6,7 +6,7 @@ contains no vendored OpenCloud implementation or executable distribution.
 | Component | Exact source examined | License and use |
 | --- | --- | --- |
 | OpenCloud server v7.2.4 | `opencloud-eu/opencloud@1770793f2657e153836c32d32dd6d256b8531d3d` | Apache-2.0; production WebDAV/backend compatibility target. |
-| OpenCloud Web v8.0.0 | `opencloud-eu/web@11e699ac82fda4dd113ac3ceb2ecb2dd74574045` | AGPL-3.0; examined for client and vault integration surfaces. Its separately integrity-pinned published SDK is used in an explicit optional interoperability test, not bundled as an application runtime. |
+| OpenCloud Web v8.0.0 | `opencloud-eu/web@11e699ac82fda4dd113ac3ceb2ecb2dd74574045` | AGPL-3.0; explicit optional source build of the original Files UI with a recorded owner-recovery patch. The published SDK is pinned separately for interoperability tests. |
 | VOLPAROSSA Image helpers | `VOLPAROSSA/volparossa-image@9e925bdb1bde4d7686868e7aa826fd8144aca91e` | GPL-3.0-only; unchanged OpenPGP process helpers and private core-storage bridge, including their complete license. |
 
 Keep original license/notice files with any future incorporated upstream source;
@@ -42,6 +42,28 @@ Its backend is explicitly synthetic. It proves the tested SDK reads/listings and
 authentication boundary, not protected peer recovery or the complete OpenCloud UI.
 Normal tests skip this trial unless `VOLPAROSSA_CLOUD_WEB_SDK` explicitly points
 at the staged verified SDK; they never download executable dependencies.
+
+## Optional original Files UI build
+
+`third_party/opencloud-web-ui.json` pins the same Web 8 source revision and tree
+`4f13ceee9b21450659266df69a4fac57f25c3bc9`, its unchanged AGPL license, frozen
+lockfile and workspace manifest. `patches/opencloud-web-owner-recovery.patch`
+adds explicit numeric-loopback owner recovery, in-memory bearer authentication,
+an honest recovery menu and authenticated blob downloads. It leaves ordinary
+upstream authentication unchanged when recovery is not explicitly enabled.
+
+`scripts/build_web_ui.py` uses exact pnpm **11.27.0** (MIT), verified against the
+recorded registry SHA-512 integrity, and existing Node **24.19.0**. Dependency
+fetching is explicit and frozen, without lifecycle scripts. The Vite production
+build is network-isolated; no global installation is performed. The build receipt
+records every output asset and the unchanged license copied as `UPSTREAM_LICENSE`.
+Generated source, dependencies and binaries stay in ignored `build/`, not Git.
+This is provenance-checked local construction, not a bit-reproducible build or
+an audited redistribution of every transitive dependency.
+
+The real UI smoke uses an explicitly selected, already installed Firefox and a
+new private profile. It does not download a browser or use a user's existing
+profile. Its synthetic backend is not evidence of GPG or peer-storage recovery.
 
 - [Published SDK identity](https://registry.npmjs.org/@opencloud-eu/web-client/8.0.0)
 - [Original read adapter](https://github.com/opencloud-eu/web/blob/11e699ac82fda4dd113ac3ceb2ecb2dd74574045/packages/web-client/src/webdav/getFileContents.ts)

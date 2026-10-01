@@ -35,8 +35,11 @@ retirement (core run36909989038, Cloud541cc826).
 
 The developing read service adds a GPG-encrypted immutable owner catalog,
 authenticated loopback DAV listing/reads and an actual pinned OpenCloud Web SDK
-check. Local catalog tests explicitly inject storage; the SDK transport trial
-and protected-peer trial are separate until the new joined proof passes. Owner
+check. The joined SDK/protected-peer trial now passes with the source and one
+provider offline (core run36916040042). The new source-built original Files UI
+uses an explicit owner-recovery token, read-only capability projection and
+catalog-bound resource IDs, not a fabricated OIDC session. Its UI trial and
+the peer trial remain separate until a joined original-UI proof passes. Owner
 keys, file bundles and core journals are still local dependencies. No OIDC,
 LibreGraph, writable synchronization or sharing service is replaced by this
 read interface. Whole-instance backups are useful for recovery but are not a

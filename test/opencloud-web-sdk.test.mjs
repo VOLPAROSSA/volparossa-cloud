@@ -6,7 +6,8 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { startPrivateDavServer } from '../src/private-dav-server.mjs';
+import { recoveryResourceId, startPrivateDavServer } from '../src/private-dav-server.mjs';
+import { recoverySpaceId } from '../src/private-resource-id.mjs';
 import { checkedSDK } from './fixtures/checked-sdk.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,6 +39,13 @@ test('actual OpenCloud Web8 SDK lists and reads only authenticated selected priv
       assert.deepEqual(segments, ['test-space']);
       return [{ name: filename, ...file }];
     },
+    async resolveResourceId(id) {
+      if (id === recoverySpaceId('test-space')) return ['test-space'];
+      const parts = ['test-space', filename];
+      if (id === recoveryResourceId(parts)) return parts;
+      if (id === recoveryResourceId(['test-space'])) return ['test-space'];
+      return null;
+    },
     async open(segments) {
       assert.deepEqual(segments, ['test-space', filename]);
       opens++;
@@ -47,10 +55,25 @@ test('actual OpenCloud Web8 SDK lists and reads only authenticated selected priv
   try {
     service = await startPrivateDavServer({ backend, bearerToken: token });
     const client = webdav(service.origin, () => ({ Authorization: `Bearer ${token}` }));
-    const space = { id: 'test-space', webDavPath: 'spaces/test-space', driveType: 'personal' };
+    const space = { id: recoverySpaceId('test-space'),
+      webDavPath: 'spaces/' + recoverySpaceId('test-space'), driveType: 'project' };
     const listing = await client.listFiles(space);
     assert.equal(listing.children.length, 1);
     assert.equal(listing.children[0].name, filename);
+    const resource = listing.children[0];
+    assert.match(resource.id, /^vp-recovery-[a-f0-9]{64}![a-f0-9]{64}$/u);
+    assert.equal(resource.storageId, space.id);
+    assert.equal(resource.parentFolderId, listing.resource.id);
+    assert.equal(resource.canDownload(), true);
+    for (const method of ['canUpload', 'canCreate', 'canRename', 'canBeDeleted', 'canEditTags']) {
+      assert.equal(resource[method](), false);
+    }
+    assert.equal(resource.canShare({ ability: { can: () => true } }), false);
+    const byId = await client.getFileInfo(space, { fileId: resource.id });
+    assert.equal(byId.id, resource.id);
+    assert.equal(byId.path, '/' + filename);
+    const directoryById = await client.listFiles(space, { fileId: listing.resource.id });
+    assert.equal(directoryById.children[0].id, resource.id);
     const complete = await client.getFileContents(space, { path: filename }, { responseType: 'arraybuffer' });
     assert.deepEqual(Buffer.from(complete.body), data);
     assert.equal(complete.headers.ETag, file.etag);

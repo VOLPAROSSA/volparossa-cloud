@@ -8,6 +8,9 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { isAbsolute, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { RecoveryMetadataError, recoveryMetadata } from './recovery-web-metadata.mjs';
+import { isRecoveryResourceId, isRecoverySpaceId, recoveryResourceId, recoverySpaceId } from './private-resource-id.mjs';
+export { recoveryResourceId } from './private-resource-id.mjs';
 
 const PREFIX = '/dav/spaces/';
 const ALLOW = 'OPTIONS, PROPFIND, HEAD, GET';
@@ -15,6 +18,9 @@ const BODY_MAX = 16384;
 const CHILDREN_MAX = 256;
 const ETAG = /^"[\x21\x23-\x7e]{0,512}"$/u;
 const PROPERTIES = ['displayname', 'resourcetype', 'getcontentlength', 'getetag', 'getlastmodified', 'getcontenttype'];
+const OC = 'http://owncloud.org/ns';
+const OC_PROPERTIES = ['fileid', 'file-parent', 'name', 'permissions'];
+const allProperties = () => [...PROPERTIES.map(name => ['DAV:', name]), ...OC_PROPERTIES.map(name => [OC, name])];
 const SENSITIVE_HEADERS = new Set(['host', 'authorization', 'origin', 'depth', 'range', 'if-match',
   'if-none-match', 'if-range', 'content-length', 'transfer-encoding', 'content-type',
   'access-control-request-method', 'access-control-request-headers']);
@@ -40,6 +46,7 @@ function pathSegments(target) {
   try { return tail.split('/').map(value => segment(decodeURIComponent(value))); }
   catch { throw new Rejected(400); }
 }
+
 function metadata(value, maximum) {
   check(value && ['file', 'directory'].includes(value.kind) && ETAG.test(value.etag)
     && integer(value.size, 0, maximum) && (value.kind === 'file' || value.size === 0)
@@ -54,7 +61,7 @@ function metadata(value, maximum) {
 // Supports namespace-qualified allprop, propname and explicit property lists;
 // unknown requested properties receive their own 404 propstat.
 function properties(body) {
-  if (!body.length) return { mode: 'allprop', names: PROPERTIES.map(name => ['DAV:', name]) };
+  if (!body.length) return { mode: 'allprop', names: allProperties() };
   let source = new TextDecoder('utf-8', { fatal: true }).decode(body).trim();
   source = source.replace(/^<\?xml\s+version=(?:"1\.0"|'1\.0')(?:\s+encoding=(?:"utf-8"|'utf-8'|"UTF-8"|'UTF-8'))?\s*\?>/u, '').trim();
   check(!/[&!]/u.test(source));
@@ -99,7 +106,7 @@ function properties(body) {
     return { mode: 'prop', names: select.children.map(node => [node.ns, node.name]) };
   }
   check(select.children.length === 0);
-  return { mode: select.name, names: PROPERTIES.map(name => ['DAV:', name]) };
+  return { mode: select.name, names: allProperties() };
 }
 function responseXML(segments, entry, requested) {
   const href = PREFIX + segments.map(encodeURIComponent).join('/') + (entry.kind === 'directory' && segments.length ? '/' : '');
@@ -108,13 +115,20 @@ function responseXML(segments, entry, requested) {
     getcontentlength: String(entry.size), getetag: xml(entry.etag),
     getlastmodified: entry.lastModified === null ? null : xml(entry.lastModified),
     getcontenttype: entry.kind === 'directory' ? 'httpd/unix-directory' : 'application/octet-stream' };
+  const owncloud = { fileid: recoveryResourceId(segments),
+    'file-parent': segments.length ? recoveryResourceId(segments.slice(0, -1)) : null,
+    name: xml(segments.at(-1) ?? ''),
+    // OpenCloud's R flag means shareable, not readable. An empty set retains
+    // ordinary reading without offering upload, rename, delete or sharing.
+    permissions: '' };
   const good = [], missing = [];
   for (const [ns, name] of requested.names) {
-    const supported = ns === 'DAV:' && Object.hasOwn(values, name) && values[name] !== null;
+    const source = ns === 'DAV:' ? values : ns === OC ? owncloud : {};
+    const supported = Object.hasOwn(source, name) && source[name] !== null;
     const qualified = ns ? `p:${name}` : name;
     const tag = ns ? `<${qualified} xmlns:p="${xml(ns)}"` : `<${qualified} xmlns=""`;
     (supported ? good : missing).push(supported && requested.mode !== 'propname'
-      ? `${tag}>${values[name]}</${qualified}>` : `${tag}/>`);
+      ? `${tag}>${source[name]}</${qualified}>` : `${tag}/>`);
   }
   const block = (items, status) => items.length
     ? `<d:propstat><d:prop>${items.join('')}</d:prop><d:status>HTTP/1.1 ${status}</d:status></d:propstat>` : '';
@@ -181,12 +195,13 @@ async function requestBody(req, method, signal) {
  */
 export async function startPrivateDavServer({ backend, bearerToken, port = 0, allowedOrigins = [],
   maxConcurrent = 2, requestTimeoutMs = 120000, maxRangeBytes = 16 * 1024 ** 2,
-  maxFileBytes = 8 * 1024 ** 3 } = {}) {
+  maxFileBytes = 8 * 1024 ** 3, recoveryWeb = null } = {}) {
   check(backend && ['stat', 'list', 'open'].every(name => typeof backend[name] === 'function')
     && typeof bearerToken === 'string' && bearerToken.length <= 8192 && /^[A-Za-z0-9._~+/-]{32,8192}=*$/u.test(bearerToken)
     && integer(port, 0, 65535) && integer(maxConcurrent, 1, 32)
     && integer(requestTimeoutMs, 10, 3600000) && integer(maxRangeBytes, 1, 64 * 1024 ** 2)
-    && integer(maxFileBytes, 1, 8 * 1024 ** 3) && Array.isArray(allowedOrigins) && allowedOrigins.length <= 16);
+    && integer(maxFileBytes, 1, 8 * 1024 ** 3) && Array.isArray(allowedOrigins) && allowedOrigins.length <= 16
+    && (recoveryWeb === null || recoveryWeb && typeof recoveryWeb.assetsFactory === 'function'));
   const origins = new Set(allowedOrigins.map(value => {
     const url = new URL(value);
     check(['http:', 'https:'].includes(url.protocol) && url.origin === value && !url.username && !url.password);
@@ -194,7 +209,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
   }));
   const secret = Buffer.from(`Bearer ${bearerToken}`);
   const tasks = new Set(), controllers = new Set();
-  let origin, closing = false, cleanupFailure;
+  let origin, closing = false, cleanupFailure, ready = false, assets;
   const fail = (res, status) => {
     if (res.destroyed || res.writableEnded) return;
     if (res.headersSent) { res.destroy(); return; }
@@ -208,7 +223,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
     let opened, file, timer;
     const task = (async () => {
       try {
-        check(!closing && controllers.size < maxConcurrent, 503);
+        check(ready && !closing && controllers.size < maxConcurrent, 503);
         check(req.rawHeaders.length <= 128);
         const seen = new Set();
         for (let i = 0; i < req.rawHeaders.length; i += 2) {
@@ -223,7 +238,25 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
           res.setHeader('Vary', 'Origin');
           res.setHeader('Access-Control-Expose-Headers', 'ETag, Content-Range, Content-Length, Last-Modified');
         }
-        const segments = pathSegments(req.url);
+        // Only reviewed public application assets precede authentication. Never
+        // derive their bytes or existence from catalog names, data or secrets.
+        // The pinned Web 8 icon/logo loader appends exactly this version.
+        // Only already verified public assets qualify; never normalize a
+        // private route, arbitrary query, encoded path or unknown asset.
+        const assetPath = req.url.endsWith('?v=8.0.0')
+          ? req.url.slice(0, -'?v=8.0.0'.length) : req.url;
+        if (assets?.has(assetPath)) {
+          check(['GET', 'HEAD'].includes(req.method), 405);
+          check(req.headers.range === undefined && !req.headers['transfer-encoding']
+            && !Number(req.headers['content-length'] ?? 0));
+          const asset = assets.get(assetPath);
+          res.writeHead(200, { 'Content-Type': asset.contentType, 'Content-Length': asset.data.length,
+            'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+            'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' });
+          res.end(req.method === 'HEAD' ? undefined : asset.data); return;
+        }
+        const webMetadata = recoveryWeb && /^\/(?:volparossa|graph|ocs)\//u.test(req.url);
+        let segments = webMetadata ? null : pathSegments(req.url);
         if (req.method === 'OPTIONS' && requestOrigin && req.headers['access-control-request-method']) {
           check(['PROPFIND', 'HEAD', 'GET'].includes(req.headers['access-control-request-method']), 405);
           const names = (req.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
@@ -235,7 +268,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         }
         const token = Buffer.from(req.headers.authorization ?? '');
         check(token.length === secret.length && timingSafeEqual(token, secret), 401);
-        check(['OPTIONS', 'PROPFIND', 'HEAD', 'GET'].includes(req.method), 405);
+        check((webMetadata ? ['GET'] : ['OPTIONS', 'PROPFIND', 'HEAD', 'GET']).includes(req.method), 405);
         // Conditional forms outside this narrow read-only contract cannot
         // silently authorize a different version or force full materialization.
         check(req.headers['if-range'] === undefined && req.headers.if === undefined);
@@ -247,9 +280,36 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         controller.signal.throwIfAborted();
         res.setHeader('Cache-Control', 'private, no-store');
         res.setHeader('X-Content-Type-Options', 'nosniff');
+        if (webMetadata) {
+          const value = await recoveryMetadata(req.url, { origin, backend,
+            resourceId: recoveryResourceId, signal: controller.signal });
+          const data = Buffer.from(JSON.stringify(value));
+          check(data.length <= 1024 ** 2, 503);
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': data.length });
+          res.end(data); return;
+        }
         if (req.method === 'OPTIONS') { res.writeHead(204, { Allow: ALLOW, DAV: '1' }); res.end(); return; }
         const requested = req.method === 'PROPFIND' ? properties(body) : null;
         if (requested) check(['0', '1'].includes(req.headers.depth), 403);
+        // The original Files UI navigates by resource ID. Resolve only IDs in
+        // this unlocked catalog, after authentication; never ask the origin.
+        if ((segments.length === 1 && isRecoveryResourceId(segments[0])
+          || isRecoverySpaceId(segments[0]))
+          && typeof backend.resolveResourceId === 'function') {
+          const resolved = await backend.resolveResourceId(segments[0], { signal: controller.signal });
+          controller.signal.throwIfAborted();
+          check(resolved !== null, 404);
+          check(Array.isArray(resolved) && resolved.length > 0 && resolved.length <= 32, 503);
+          resolved.forEach(segment);
+          if (isRecoverySpaceId(segments[0])) {
+            check(resolved.length === 1 && recoverySpaceId(resolved[0]) === segments[0], 503);
+            segments = [...resolved, ...segments.slice(1)];
+            check(segments.length <= 32);
+          } else {
+            check(recoveryResourceId(resolved) === segments[0], 503);
+            segments = resolved;
+          }
+        }
         const raw = await backend.stat(segments, { signal: controller.signal });
         controller.signal.throwIfAborted();
         const entry = raw === null ? null : metadata(raw, maxFileBytes);
@@ -307,7 +367,8 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         if (length === 0) res.end();
         else await pipeline(file.createReadStream({ autoClose: false, ...selected }), res, { signal: controller.signal });
       } catch (error) {
-        fail(res, error instanceof Rejected ? error.status : controller.signal.aborted ? 504 : 503);
+        fail(res, error instanceof Rejected || error instanceof RecoveryMetadataError
+          ? error.status : controller.signal.aborted ? 504 : 503);
       } finally {
         clearTimeout(timer);
         try { await file?.close(); } finally {
@@ -334,6 +395,28 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
     server.listen({ port, host: '127.0.0.1', exclusive: true }, () => { server.off('error', reject); resolve(); });
   });
   origin = `http://127.0.0.1:${server.address().port}`;
+  if (recoveryWeb) {
+    try {
+      assets = await recoveryWeb.assetsFactory(origin);
+      check(assets instanceof Map && assets.size > 0 && assets.size <= 10000);
+      let total = 0;
+      for (const [path, value] of assets) {
+        check(typeof path === 'string' && path.startsWith('/') && path.length <= 2048
+          && !/[?#\\\x00-\x20\x7f]/u.test(path) && !path.startsWith('//')
+          && !/^\/(?:dav|volparossa|graph|ocs)\//u.test(path)
+          && Buffer.isBuffer(value.data) && value.data.length <= 32 * 1024 ** 2
+          && typeof value.contentType === 'string' && /^[a-z0-9.+/-]+(?:; charset=utf-8)?$/iu.test(value.contentType));
+        total += value.data.length;
+        check(total <= 128 * 1024 ** 2);
+      }
+    } catch (error) {
+      closing = true;
+      server.closeAllConnections();
+      await new Promise(resolve => server.close(resolve));
+      throw error;
+    }
+  }
+  ready = true;
   let closed;
   return Object.freeze({ origin, baseURL: origin + PREFIX, close() {
     if (!closed) closed = (async () => {

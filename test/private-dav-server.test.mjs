@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { startPrivateDavServer } from '../src/private-dav-server.mjs';
+import { recoveryResourceId, startPrivateDavServer } from '../src/private-dav-server.mjs';
+import { recoverySpaceId } from '../src/private-resource-id.mjs';
 
 const TOKEN = 'synthetic-owner-credential-not-real-123456';
 const DATA = Buffer.from('synthetic owner private file');
@@ -42,6 +43,12 @@ async function fixture(run, options = {}) {
     async list(parts) {
       calls.list++;
       return parts.length ? [{ name: 'private.txt', ...FILE }] : [{ name: 'space', ...DIR }];
+    },
+    async resolveResourceId(id) {
+      if (id === recoverySpaceId('space')) return ['space'];
+      if (id === recoveryResourceId(['space', 'private.txt'])) return ['space', 'private.txt'];
+      if (id === recoveryResourceId(['space'])) return ['space'];
+      return null;
     },
     async open(parts, { signal }) {
       calls.open++;
@@ -136,16 +143,144 @@ test('bounded PROPFIND allprop/propname/explicit properties use metadata only', 
     assert.match(all.body.toString(), /<d:href>\/dav\/spaces\/space\/private.txt<\/d:href>/u);
     assert.match(all.body.toString(), /&quot;synthetic-v1&quot;/u);
     const body = '<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop>'
-      + '<d:getetag/><d:getcontentlength/><oc:fileid/></d:prop></d:propfind>';
+      + '<d:getetag/><d:getcontentlength/><oc:fileid/><oc:unavailable/></d:prop></d:propfind>';
     const named = await request(server, { method: 'PROPFIND', headers: { Depth: '0', 'Content-Type': 'application/xml' }, body });
     assert.equal(named.status, 207);
     assert.match(named.body.toString(), /HTTP\/1.1 404 Not Found/u);
-    assert.match(named.body.toString(), /<p:fileid xmlns:p="http:\/\/owncloud.org\/ns"\/>/u);
+    assert.ok(named.body.toString().includes(`<p:fileid xmlns:p="http://owncloud.org/ns">${recoveryResourceId(['space', 'private.txt'])}</p:fileid>`));
+    assert.match(named.body.toString(), /<p:unavailable xmlns:p="http:\/\/owncloud.org\/ns"\/>/u);
     const names = await request(server, { method: 'PROPFIND', headers: { Depth: '0' },
       body: '<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><propname/></propfind>' });
     assert.equal(names.status, 207); assert.doesNotMatch(names.body.toString(), /synthetic-v1/u);
     assert.equal(calls.open, 0);
   });
+});
+
+test('OpenCloud recovery resource IDs are stable and permissions never offer writes or sharing', async () => {
+  await fixture(async ({ server, calls }) => {
+    const body = '<d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop>'
+      + '<oc:fileid/><oc:file-parent/><oc:name/><oc:permissions/><d:fileid/></d:prop></d:propfind>';
+    const options = { method: 'PROPFIND', path: '/dav/spaces/space/', headers: { Depth: '1' }, body };
+    const first = await request(server, options);
+    const second = await request(server, options);
+    assert.equal(first.status, 207);
+    assert.deepEqual(first.body, second.body);
+    const text = first.body.toString();
+    assert.ok(text.includes(`>${recoveryResourceId(['space', 'private.txt'])}</p:fileid>`));
+    assert.ok(text.includes(`>${recoveryResourceId(['space'])}</p:file-parent>`));
+    assert.equal((text.match(/<p:permissions xmlns:p="http:\/\/owncloud.org\/ns"><\/p:permissions>/gu) ?? []).length, 2);
+    assert.match(text, /<p:fileid xmlns:p="DAV:"\/>/u);
+    assert.equal(calls.open, 0);
+  });
+  assert.notEqual(recoveryResourceId(['space', 'a', 'same']), recoveryResourceId(['space', 'b', 'same']));
+  assert.notEqual(recoveryResourceId(['other', 'same']), recoveryResourceId(['space', 'same']));
+  assert.throws(() => recoveryResourceId(['space', '..']));
+});
+
+test('original Files ID-based navigation resolves only within the unlocked catalog', async () => {
+  await fixture(async ({ server, calls }) => {
+    const root = '/dav/spaces/' + recoveryResourceId(['space']);
+    const listing = await request(server, { path: root, method: 'PROPFIND', headers: { Depth: '1' } });
+    assert.equal(listing.status, 207);
+    assert.match(listing.body.toString(), /<d:href>\/dav\/spaces\/space\/private.txt<\/d:href>/u);
+    const read = await request(server, { path: '/dav/spaces/' + recoveryResourceId(['space', 'private.txt']) });
+    assert.equal(read.status, 200); assert.deepEqual(read.body, DATA);
+    const unknown = await request(server, { path: '/dav/spaces/' + recoveryResourceId(['space', 'unknown']) });
+    assert.equal(unknown.status, 404);
+    assert.equal(calls.open, 1);
+  });
+});
+
+test('explicit recovery web exposes only public assets before auth and projects actual selected spaces', async () => {
+  const page = Buffer.from('<!doctype html><title>Public recovery client</title>');
+  await fixture(async ({ server, calls }) => {
+    const index = await request(server, { path: '/', headers: { Authorization: 'Bearer wrong' } });
+    assert.equal(index.status, 200); assert.deepEqual(index.body, page);
+    const icon = await request(server, { path: '/assets/icon.svg?v=8.0.0', headers: { Authorization: 'Bearer wrong' } });
+    assert.equal(icon.status, 200); assert.deepEqual(icon.body, Buffer.from('<svg/>'));
+    for (const path of ['/assets/icon.svg?v=9.0.0', '/assets/icon.svg?v=8.0.0&extra=1',
+      '/assets/icon.svg?extra=1?v=8.0.0', '/assets/missing.svg?v=8.0.0']) {
+      assert.notEqual((await request(server, { path, headers: { Authorization: 'Bearer wrong' } })).status, 200);
+    }
+    for (const path of ['/volparossa/recovery/session', '/graph/v1beta1/me/drives', '/ocs/v1.php/cloud/capabilities']) {
+      const denied = await request(server, { path, headers: { Authorization: 'Bearer wrong' } });
+      assert.equal(denied.status, 401); assert.equal(denied.body.length, 0);
+    }
+    assert.equal(calls.list, 0); assert.equal(calls.stat, 0);
+    const session = JSON.parse((await request(server, { path: '/volparossa/recovery/session' })).body);
+    assert.deepEqual(session, { version: 1, authority: 'owner-local-catalog', readOnly: true,
+      upstreamAccount: false, owner: { id: 'volparossa-owner-recovery', displayName: 'Private recovery' } });
+    const roles = await request(server, { path: '/graph/v1beta1/roleManagement/permissions/roleDefinitions' });
+    assert.equal(roles.status, 200); assert.deepEqual(JSON.parse(roles.body), []);
+    assert.equal((await request(server, { path: '/volparossa/recovery/session?v=8.0.0',
+      headers: { Authorization: 'Bearer wrong' } })).status, 401);
+    assert.equal((await request(server, { path: '/volparossa/recovery/session?v=8.0.0' })).status, 400);
+    const projects = await request(server, { path: '/graph/v1beta1/me/drives?%24filter=driveType%20eq%20project&%24orderby=name%20asc' });
+    assert.equal(projects.status, 200);
+    const drives = JSON.parse(projects.body).value;
+    assert.equal(drives.length, 1);
+    assert.equal(drives[0].id, recoverySpaceId('space')); assert.equal(drives[0].driveType, 'project');
+    assert.equal(drives[0].root.id, recoveryResourceId(['space']));
+    assert.deepEqual(drives[0].root.permissions, []);
+    assert.equal(drives[0].webUrl, server.origin + '/dav/spaces/space/');
+    assert.equal(Object.hasOwn(drives[0], 'quota'), false);
+    const personal = await request(server, { path: '/graph/v1beta1/me/drives?%24filter=driveType%20eq%20personal' });
+    assert.deepEqual(JSON.parse(personal.body), { value: [] });
+    const permissionPath = '/graph/v1beta1/drives/' + recoverySpaceId('space') + '/root/permissions';
+    const permissions = await request(server, { path: permissionPath + '?%24top=0&%24select=%40libre.graph.permissions.actions.allowedValues' });
+    assert.equal(permissions.status, 200);
+    assert.deepEqual(JSON.parse(permissions.body).value, []);
+    const shares = await request(server, { path: permissionPath + '?%24filter=grantedToV2%20ne%20%27%27&%24count=true&%24top=0' });
+    assert.equal(shares.status, 200); assert.deepEqual(JSON.parse(shares.body).value, []);
+    assert.equal((await request(server, { path: '/graph/v1beta1/drives/missing/root/permissions' })).status, 404);
+    assert.equal((await request(server, { path: '/graph/v1beta1/me/drives?%24filter=anything' })).status, 400);
+    assert.equal((await request(server, { method: 'POST', path: '/graph/v1beta1/me/drives' })).status, 405);
+    assert.equal((await request(server, { path: '/graph/v1.0/me' })).status, 404);
+    assert.equal(calls.open, 0);
+  }, { server: { recoveryWeb: { assetsFactory: async () => new Map([
+    ['/', { data: page, contentType: 'text/html; charset=utf-8' }],
+    ['/assets/icon.svg', { data: Buffer.from('<svg/>'), contentType: 'image/svg+xml' }],
+  ]) } } });
+});
+
+test('project storage IDs map only to exact selected roots for listing and downloads', async () => {
+  await fixture(async ({ server, calls }) => {
+    const root = '/dav/spaces/' + recoverySpaceId('space');
+    const listing = await request(server, { path: root, method: 'PROPFIND', headers: { Depth: '1' } });
+    assert.equal(listing.status, 207);
+    const file = await request(server, { path: root + '/private.txt' });
+    assert.equal(file.status, 200); assert.deepEqual(file.body, DATA);
+    assert.equal((await request(server, { path: '/dav/spaces/' + recoverySpaceId('unknown') + '/private.txt' })).status, 404);
+    assert.equal(calls.open, 1);
+  });
+});
+
+test('recovery capabilities do not advertise sharing, updates, previews or writable origin accounts', async () => {
+  await fixture(async ({ server }) => {
+    const response = await request(server, { path: '/ocs/v1.php/cloud/capabilities?format=json' });
+    assert.equal(response.status, 200);
+    const { version, capabilities } = JSON.parse(response.body).ocs.data;
+    assert.equal(version.string, 'owner-recovery');
+    assert.equal(capabilities.files_sharing.api_enabled, false);
+    assert.equal(capabilities.core['check-for-updates'], false);
+    assert.equal(capabilities.core.status.productversion, '0.1.0-owner-recovery');
+    assert.equal(capabilities.files.thumbnail.enabled, false);
+    assert.deepEqual(capabilities.files.app_providers, []);
+    assert.equal(capabilities.spaces.projects, true);
+  }, { server: { recoveryWeb: { assetsFactory: async () => new Map([
+    ['/', { data: Buffer.from('public'), contentType: 'text/plain' }],
+  ]) } } });
+});
+
+test('public web asset configuration cannot replace private authenticated endpoints', async () => {
+  let origin;
+  await assert.rejects(startPrivateDavServer({ bearerToken: TOKEN,
+    backend: { stat() {}, list() {}, open() {} }, recoveryWeb: { assetsFactory: async value => {
+      origin = value;
+      return new Map([['/volparossa/recovery/session', { data: Buffer.from('unauthorized'), contentType: 'text/plain' }]]);
+    } },
+  }));
+  await assert.rejects(fetch(origin));
 });
 
 test('infinite depth, XML entities, malformed/body limits fail without catalog access', async () => {
