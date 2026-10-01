@@ -93,3 +93,14 @@ with the source and one provider unavailable. A combined original-UI/peer trial
 remains required. Account enrollment, cross-device recovery of catalog and keys,
 writable synchronization, conflict resolution and sharing/revocation are still
 open work; this mode does not make all of OpenCloud server-independent.
+
+The subsequent joined trial `VOLPAROSSA/volparossa` run `36935715873` reached
+the original UI after protected-peer restore/catalog/SDK reads, but failed during
+unlock; cleanup passed. A local original-Web8 diagnostic reproduced the same unlock failure:
+with private request concurrency set to two, six open browser connections filled
+the six-socket transport cap and prevented login from reaching authentication.
+Web mode now retains at least eight transport sockets, without increasing its
+private request/restoration concurrency. The focused real-HTTP regression fails
+with the old limit and passes with the correction. The local synthetic-backend UI
+diagnostic confirms wrong-token rejection, successful unlock and read-only file
+navigation; this correction still requires a new joined peer-storage UI trial.

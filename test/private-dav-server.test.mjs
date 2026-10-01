@@ -354,6 +354,59 @@ test('concurrency/deadline abort backend work and close joins outstanding reques
   } });
 });
 
+test('recovery web permits authenticated requests beside six idle browser connections', { timeout: 5000 }, async () => {
+  await fixture(async ({ server, calls }) => {
+    const idle = [];
+    const address = new URL(server.origin);
+    try {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve, reject) => {
+          const socket = net.connect(Number(address.port), '127.0.0.1');
+          idle.push(socket);
+          socket.once('error', reject);
+          socket.once('connect', resolve);
+        });
+      }
+      const path = '/volparossa/recovery/session';
+      const denied = await request(server, { path, headers: { Authorization: 'Bearer wrong' } });
+      assert.equal(denied.status, 401); assert.equal(denied.body.length, 0);
+      const allowed = await request(server, { path });
+      assert.equal(allowed.status, 200);
+      assert.equal(JSON.parse(allowed.body).authority, 'owner-local-catalog');
+      assert.equal(calls.stat, 0); assert.equal(calls.list, 0); assert.equal(calls.open, 0);
+    } finally {
+      await Promise.all(idle.map(socket => new Promise(resolve => {
+        if (socket.closed) { resolve(); return; }
+        socket.once('close', resolve); socket.destroy();
+      })));
+    }
+  }, { server: { maxConcurrent: 2, recoveryWeb: {
+    assetsFactory: async () => new Map([['/', { data: Buffer.from('public'), contentType: 'text/plain' }]]),
+  } } });
+});
+
+test('recovery web connection headroom does not increase private request concurrency', async () => {
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let aborted = 0;
+  await fixture(async ({ server }) => {
+    const first = request(server);
+    await started;
+    assert.equal((await request(server)).status, 503);
+    assert.equal((await first).status, 504);
+    await server.close(); assert.equal(aborted, 1);
+  }, { server: { maxConcurrent: 1, requestTimeoutMs: 100, recoveryWeb: {
+    assetsFactory: async () => new Map([['/', { data: Buffer.from('public'), contentType: 'text/plain' }]]),
+  } }, backend: {
+    async open(_parts, { signal }) {
+      entered();
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => {
+        aborted++; reject(new Error('synthetic backend abort'));
+      }, { once: true }));
+    },
+  } });
+});
+
 test('post-materialization version mismatch disposes plaintext without returning any bytes', async () => {
   let disposed = 0;
   await fixture(async ({ server }) => {
