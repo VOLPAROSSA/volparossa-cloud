@@ -1,0 +1,31 @@
+name: OpenCloud integration components
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  components:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.19.0'
+      - name: Check the actual DAV adapter against synthetic HTTP fixtures
+        run: node --test test/*.test.mjs
+      - name: Check provenance and whitespace
+        run: |
+          python3 -m json.tool third_party/opencloud-source.json > /dev/null
+          git diff --check
+
+# No account access, OpenCloud deployment, private-file import, daemon startup or
+# core-storage proof. This workflow exercises the real adapter on synthetic data.

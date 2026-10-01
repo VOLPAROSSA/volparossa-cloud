@@ -1,0 +1,35 @@
+{
+  "schema": "volparossa.opencloud.source.v1",
+  "checked_at": "2026-10-01",
+  "repository": "https://github.com/opencloud-eu/opencloud",
+  "track": "production-stable",
+  "tag": "v7.2.4",
+  "commit": "1770793f2657e153836c32d32dd6d256b8531d3d",
+  "license": "Apache-2.0",
+  "license_url": "https://github.com/opencloud-eu/opencloud/blob/1770793f2657e153836c32d32dd6d256b8531d3d/LICENSE",
+  "release_url": "https://github.com/opencloud-eu/opencloud/releases/tag/v7.2.4",
+  "source_paths": [
+    "services/storage-users/pkg/config/config.go",
+    "services/storage-users/README.md",
+    "services/frontend/pkg/config/reva.go",
+    "services/sharing/README.md"
+  ],
+  "official_api_references": [
+    "https://docs.opencloud.eu/docs/next/dev/server/apis/http/webdav/",
+    "https://docs.opencloud.eu/docs/next/dev/server/apis/http/graph/",
+    "https://docs.opencloud.eu/docs/next/dev/server/apis/http/authorization/"
+  ],
+  "documentation_track_note": "The official API pages use rolling documentation. Production source is pinned above; live interoperability with that build remains to be demonstrated.",
+  "implemented_seam": "Owner-authorized HTTPS HEAD and conditional ranged GET of explicitly selected /dav/spaces/{resourceID}/{path} files. Strong ETag, exact origin, byte and time bounds; no redirects.",
+  "vendored_code": false,
+  "automatic_runtime_downloads_or_installs": false,
+  "proof_scope": "Synthetic numeric-loopback HTTP contract tests only; not proof of live OpenCloud, core storage, or source-off access.",
+  "private_data": "Bearer tokens, source file URLs and file bytes remain owner-private. Nothing in this adapter publishes public cache or training data.",
+  "redundancy": "Not implemented or configured here; all applications must use the shared core-owned storage policy.",
+  "known_limits": [
+    "No directory listing, upload, writable mount, Graph/OIDC replacement or native client integration.",
+    "No encrypted storage or second-device/server-off proof in this adapter.",
+    "An import sink must commit only after the complete byte stream succeeds.",
+    "OpenCloud rolling 7.5+ browser vaults are not a capability of this pinned stable 7.2.4 baseline."
+  ]
+}
