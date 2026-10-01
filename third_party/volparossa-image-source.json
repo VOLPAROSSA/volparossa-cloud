@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "repository": "https://github.com/VOLPAROSSA/volparossa-image",
+  "revision": "9e925bdb1bde4d7686868e7aa826fd8144aca91e",
+  "license": "GPL-3.0-only",
+  "local_modifications": false,
+  "files": {
+    "scripts/immich_snapshot.py": {
+      "local": "vendor/volparossa-image/immich_snapshot.py",
+      "bytes": 24955,
+      "sha256": "23528a0737cd0a51e88b58a7f61079b3c6aa0f19b96a1f55757a9da49718256f"
+    },
+    "src/core-storage.mjs": {
+      "local": "vendor/volparossa-image/core-storage.mjs",
+      "bytes": 20915,
+      "sha256": "d274c294a4f7c500aac552629997487c79e67faaa89dddd1383309d7e58273b0"
+    },
+    "LICENSE": {
+      "local": "vendor/volparossa-image/LICENSE",
+      "bytes": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    }
+  },
+  "reused_contracts": [
+    "Owner-private GnuPG supervised agent and standard OpenPGP AES256/MDC process",
+    "Core-owned fragment placement and uniform redundancy; additive v2 repair accounting"
+  ],
+  "not_claimed": ["Immich snapshot compatibility", "automatic dependency installation", "actual peer storage proof"]
+}

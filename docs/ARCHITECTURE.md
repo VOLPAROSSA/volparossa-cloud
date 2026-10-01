@@ -26,9 +26,16 @@ login flow remain separate work.
    stopped and no original-file fallback. Test loss of a storage provider without
    inventing receipts or dropping the core's retention/accounting rules.
 
-These are pending integration steps, not implemented server-off operation.
-Whole-instance backups are useful for recovery but are not a substitute for this
-live file-access path.
+The current one-file slice implements authorized import, private encrypted
+source metadata, a per-file recovery key, a core-storage command adapter and
+atomic owner recovery. Its actual GnuPG/DAV trial stops the synthetic source
+before repeated decryptions; the storage seam has a separately labelled contract
+fixture. An encrypted directory catalog, actual protected-peer trial and the
+client-facing listing/read interface remain pending. These results do not yet
+prove server-off OpenCloud operation. Whole-instance backups are useful for
+recovery but are not a substitute for the live file-access path.
+
+[Executable private-file recovery and its limits](PRIVATE_FILES.md)
 
 ## Backend functions that must not disappear
 
