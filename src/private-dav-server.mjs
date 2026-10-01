@@ -385,7 +385,12 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
   // Inspect all headers inside the 16KiB parser bound; do not silently truncate
   // late duplicate authority headers before our explicit 64-header rejection.
   server.maxHeadersCount = 0;
-  server.maxConnections = maxConcurrent + 4;
+  // Original Files can keep six asset connections while opening a separate
+  // credential-omitting login connection. Idle browser sockets must not consume
+  // the entire transport budget before that request reaches authentication.
+  // Keep this small headroom specific to the web mode; controllers above still
+  // enforce the unchanged private request/restoration concurrency limit.
+  server.maxConnections = recoveryWeb ? Math.max(8, maxConcurrent + 4) : maxConcurrent + 4;
   server.maxRequestsPerSocket = 32;
   server.on('checkContinue', (_req, res) => fail(res, 417));
   server.on('checkExpectation', (_req, res) => fail(res, 417));
