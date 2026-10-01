@@ -31,6 +31,27 @@ test('configuration fixes local scope, rejects unknown settings and bounds resou
     ['https://ui.example.test']);
 });
 
+test('original web UI is explicitly selected and cannot add cross-origin access', () => {
+  assert.equal(Object.hasOwn(validateConfiguration(CONFIG), 'webDist'), false);
+  assert.equal(validateConfiguration({ ...CONFIG, webDist: '/private/web-dist' }).webDist, '/private/web-dist');
+  for (const change of [{ webDist: '' }, { webDist: 'relative' }, { webDist: true },
+    { webDist: '/private/web-dist', allowedOrigins: ['https://ui.example.test'] }]) {
+    assert.throws(() => validateConfiguration({ ...CONFIG, ...change }));
+  }
+});
+
+test('explicit web selection reaches only the reviewed asset loader factory', async () => {
+  const service = await startCloudService({ ...CONFIG, webDist: '/private/web-dist' }, {
+    openCatalog: async () => ({ close: async () => {} }),
+    startServer: async options => {
+      assert.equal(typeof options.recoveryWeb.assetsFactory, 'function');
+      assert.deepEqual(options.allowedOrigins, []);
+      return { origin: 'http://127.0.0.1:12345', close: async () => {} };
+    },
+  });
+  await service.close();
+});
+
 test('explicit startup binds verified catalog backend; close is ordered and idempotent', async () => {
   const order = [];
   const cancel = new AbortController();

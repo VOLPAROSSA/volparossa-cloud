@@ -6,13 +6,14 @@ import { pathToFileURL } from 'node:url';
 import { readPrivateJSON } from '../src/private-file.mjs';
 import { openPrivateCatalog } from '../src/private-catalog.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
+import { loadRecoveryWebAssets } from './recovery-web-assets.mjs';
 
 export class CloudServeError extends Error {
   constructor(code) { super(code); this.name = 'CloudServeError'; this.code = code; }
 }
 const fail = () => { throw new CloudServeError('INVALID_PRIVATE_READ_CONFIGURATION'); };
 const FIELDS = new Set(['version', 'catalog', 'workDirectory', 'bearerToken', 'port',
-  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes']);
+  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes', 'webDist']);
 const REQUIRED = ['version', 'catalog', 'workDirectory', 'bearerToken'];
 function integer(value, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) fail();
@@ -38,9 +39,13 @@ export function validateConfiguration(value) {
     } catch { fail(); }
   }
   if (new Set(allowedOrigins).size !== allowedOrigins.length) fail();
+  if (value.webDist !== undefined && (typeof value.webDist !== 'string'
+    || !value.webDist.startsWith('/') || /[\x00-\x1f\x7f]/u.test(value.webDist)
+    || allowedOrigins.length > 0)) fail();
   return Object.freeze({
     version: 1, catalog: value.catalog, workDirectory: value.workDirectory,
     bearerToken: value.bearerToken, allowedOrigins: Object.freeze([...allowedOrigins]),
+    ...(value.webDist !== undefined ? { webDist: value.webDist } : {}),
     port: integer(value.port ?? 0, 0, 65535),
     maxOpenBytes: integer(value.maxOpenBytes ?? 256 * 1024 ** 2, 1, 8 * 1024 ** 3),
     maxConcurrent: integer(value.maxConcurrent ?? 2, 1, 16),
@@ -86,7 +91,11 @@ export async function startCloudService(value, {
     server = await startServer({ backend, bearerToken: config.bearerToken, port: config.port,
       allowedOrigins: config.allowedOrigins, maxConcurrent: config.maxConcurrent,
       requestTimeoutMs: config.requestTimeoutMs, maxRangeBytes: config.maxRangeBytes,
-      maxFileBytes: config.maxOpenBytes });
+      maxFileBytes: config.maxOpenBytes,
+      ...(config.webDist ? { recoveryWeb: {
+        assetsFactory: origin => loadRecoveryWebAssets({ distDirectory: config.webDist, origin }),
+      } } : {}),
+    });
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     return Object.freeze({ origin: server.origin, baseURL: server.baseURL, close });
   } catch (error) { await close(); throw error; }

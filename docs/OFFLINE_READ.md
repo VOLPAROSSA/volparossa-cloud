@@ -3,7 +3,9 @@
 This developing owner-side read service joins an encrypted, immutable selection
 catalog to the shared core and a read-only WebDAV interface. It is **not** a
 replacement for OpenCloud accounts, OIDC, shared permissions, synchronization or
-the full web application. A user can explicitly select their imported files;
+all web-application services. An optional [original Files recovery interface](RECOVERY_WEB.md)
+uses this same service under an explicitly separate local authority.
+A user can explicitly select their imported files;
 this does not grant new rights to another user's account or shared links.
 
 ```text
@@ -123,5 +125,7 @@ no hidden persistent plaintext cache or claim of optimized performance.
   server-independent OpenCloud.
 
 See [third-party provenance](../THIRD_PARTY_LICENSES.md) for the exact optional SDK
-and explicit staging procedure. The complete OpenCloud web interface, device
-synchronization, sharing/revocation, recovery and writable service remain open.
+and explicit staging procedure, and [Files recovery](RECOVERY_WEB.md) for the
+source-built browser interface. The combined UI-to-peer proof, complete account
+service, device synchronization, sharing/revocation, cross-device recovery and
+writable service remain open.

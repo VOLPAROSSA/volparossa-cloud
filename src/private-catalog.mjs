@@ -7,6 +7,7 @@ import { lstat, mkdtemp, open as openFile, realpath, rm } from 'node:fs/promises
 import { dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPrivateJSON, restoreStoredFile } from './private-file.mjs';
+import { isRecoveryResourceId, isRecoverySpaceId, recoveryResourceId, recoverySpaceId } from './private-resource-id.mjs';
 
 const HELPER = fileURLToPath(new URL('../scripts/private_catalog.py', import.meta.url));
 const MAX_INDEX = 2 * 1024 ** 2;
@@ -282,6 +283,11 @@ export async function openPrivateCatalog({ catalog, workDirectory, maxOpenBytes 
   const entries = validateIndex(await crypto('decrypt', ['--catalog', catalog], undefined, options.signal));
   active(options.signal);
   const nodes = indexTree(entries);
+  const resources = new Map([...nodes.keys()].map(key => [recoveryResourceId(JSON.parse(key)), key]));
+  for (const key of nodes.keys()) {
+    const parts = JSON.parse(key);
+    if (parts.length === 1) resources.set(recoverySpaceId(parts[0]), key);
+  }
   const leases = new Set();
   let charged = 0;
   let closed = false;
@@ -294,6 +300,13 @@ export async function openPrivateCatalog({ catalog, workDirectory, maxOpenBytes 
     return nodes.get(pathKey(segments(parts))) ?? null;
   }
   const backend = {
+    async resolveResourceId(id, { signal } = {}) {
+      check(!closed, 'CATALOG_CLOSED');
+      active(options.signal); active(signal);
+      check(isRecoveryResourceId(id) || isRecoverySpaceId(id), 'INVALID_CATALOG_RESOURCE_ID');
+      const key = resources.get(id);
+      return key === undefined ? null : Object.freeze(JSON.parse(key));
+    },
     async stat(parts, { signal } = {}) { return lookup(parts, signal)?.stat ?? null; },
     async list(parts, { signal } = {}) {
       const node = lookup(parts, signal);

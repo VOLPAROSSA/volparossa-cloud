@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { importPrivateFile } from '../src/private-file.mjs';
 import { createPrivateCatalog, openPrivateCatalog } from '../src/private-catalog.mjs';
+import { recoveryResourceId, recoverySpaceId } from '../src/private-resource-id.mjs';
 import { parseArguments, run } from '../scripts/cloud-catalog.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -139,6 +140,11 @@ test('real GPG encrypted owner catalog; source off, repeated verified reads usin
           etag: `"vp-${digest(item.bytes)}"`, lastModified: null });
       }
       assert.equal(await backend.stat(['unknown']), null);
+      assert.deepEqual(await backend.resolveResourceId(recoveryResourceId(['space-a', 'nested'])), ['space-a', 'nested']);
+      assert.deepEqual(await backend.resolveResourceId(recoverySpaceId('space-a')), ['space-a']);
+      assert.deepEqual(await backend.resolveResourceId(recoveryResourceId(ITEMS[1].segments)), ITEMS[1].segments);
+      assert.equal(await backend.resolveResourceId(recoveryResourceId(['unknown'])), null);
+      await assert.rejects(backend.resolveResourceId('../private.txt'), { code: 'INVALID_CATALOG_RESOURCE_ID' });
       await assert.rejects(backend.stat(['space-a', '..']), { code: 'INVALID_CATALOG_PATH' });
       await assert.rejects(backend.open(['space-a']), { code: 'NOT_A_FILE' });
       await assert.rejects(backend.list(ITEMS[0].segments), { code: 'NOT_A_DIRECTORY' });

@@ -13,8 +13,10 @@ DAV source stopped and one storage provider offline. A new encrypted catalog
 and authenticated, read-only DAV service make selected files browsable through
 the OpenCloud Web SDK. That SDK-to-peer read path now also passes its own live
 trial: listing, full/range reads, authentication checks and private cleanup with
-the source and one provider offline. This is not yet the full OpenCloud web UI,
-account service, writable synchronization or second-device recovery.
+the source and one provider offline. A source-built **OpenCloud Files interface**
+now has an explicit owner-local, read-only recovery mode. Its browser checks are
+separate from the protected-peer proof; this is not a replacement account
+service, writable synchronization or second-device recovery.
 
 ## One core, private files
 
@@ -104,12 +106,19 @@ through authenticated listing, file reads and ranges on loopback. File reads
 restore from the shared core, verify and decrypt locally, then remove their
 temporary plaintext; the original server is never a fallback.
 
-The actual pinned OpenCloud Web SDK can exercise the DAV interface. This is not
-yet the complete OpenCloud web application, account login, writable sync or
-sharing. The catalog and per-file recovery keys/journals currently remain on
-the owner's device; second-device recovery remains work in progress.
+The actual pinned OpenCloud Web SDK can exercise the DAV interface. The original
+OpenCloud Files application can also be built with a narrow recovery adapter:
+open the local service, enter its private access token and browse the explicitly
+selected files. It retains the original Files navigation and download controls,
+not an imitation file browser. This local recovery authority is visibly separate
+from an OpenCloud account; it grants no upstream identity, write or sharing rights.
+
+The catalog and per-file recovery keys/journals currently remain on the owner's
+device; second-device recovery remains work in progress.
 
 [Run the private read service and see its evidence boundaries →](docs/OFFLINE_READ.md)
+
+[Build and open the original Files recovery interface →](docs/RECOVERY_WEB.md)
 
 ## Development
 
