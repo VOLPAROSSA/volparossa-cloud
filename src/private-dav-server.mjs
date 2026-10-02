@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Explicit owner-local, read-only transport. The backend owns catalog authority
+// Explicit owner-local transport, read-only unless a separate owner upload space
+// is configured. The backend owns catalog authority
 // and verified restoration; this module never discovers peers or falls back to an origin.
 // Protocol references: RFC 4918 sections 9.1/13; RFC 9110 sections 13.2/14.
 import http from 'node:http';
@@ -9,6 +10,7 @@ import { lstat, open, realpath } from 'node:fs/promises';
 import { isAbsolute, normalize } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { RecoveryMetadataError, recoveryMetadata } from './recovery-web-metadata.mjs';
+import { OwnerUploadError } from './owner-uploads.mjs';
 import { isRecoveryResourceId, isRecoverySpaceId, recoveryResourceId, recoverySpaceId } from './private-resource-id.mjs';
 export { recoveryResourceId } from './private-resource-id.mjs';
 
@@ -108,7 +110,7 @@ function properties(body) {
   check(select.children.length === 0);
   return { mode: select.name, names: allProperties() };
 }
-function responseXML(segments, entry, requested) {
+function responseXML(segments, entry, requested, upload = false) {
   const href = PREFIX + segments.map(encodeURIComponent).join('/') + (entry.kind === 'directory' && segments.length ? '/' : '');
   const values = { displayname: xml(segments.at(-1) ?? ''),
     resourcetype: entry.kind === 'directory' ? '<d:collection/>' : '',
@@ -120,7 +122,7 @@ function responseXML(segments, entry, requested) {
     name: xml(segments.at(-1) ?? ''),
     // OpenCloud's R flag means shareable, not readable. An empty set retains
     // ordinary reading without offering upload, rename, delete or sharing.
-    permissions: '' };
+    permissions: upload ? 'C' : '' };
   const good = [], missing = [];
   for (const [ns, name] of requested.names) {
     const source = ns === 'DAV:' ? values : ns === OC ? owncloud : {};
@@ -201,6 +203,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
     && integer(port, 0, 65535) && integer(maxConcurrent, 1, 32)
     && integer(requestTimeoutMs, 10, 3600000) && integer(maxRangeBytes, 1, 64 * 1024 ** 2)
     && integer(maxFileBytes, 1, 8 * 1024 ** 3) && Array.isArray(allowedOrigins) && allowedOrigins.length <= 16
+    && (typeof backend.put !== 'function' || allowedOrigins.length === 0)
     && (recoveryWeb === null || recoveryWeb && typeof recoveryWeb.assetsFactory === 'function'));
   const origins = new Set(allowedOrigins.map(value => {
     const url = new URL(value);
@@ -208,6 +211,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
     return value;
   }));
   const secret = Buffer.from(`Bearer ${bearerToken}`);
+  const allow = typeof backend.put === 'function' ? ALLOW + ', PUT' : ALLOW;
   const tasks = new Set(), controllers = new Set();
   let origin, closing = false, cleanupFailure, ready = false, assets;
   const fail = (res, status) => {
@@ -262,13 +266,13 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
           const names = (req.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(v => v.trim()).filter(Boolean);
           check(names.every(v => ['authorization', 'content-type', 'depth', 'range', 'if-match', 'if-none-match'].includes(v)), 403);
           check(!req.headers['transfer-encoding'] && !Number(req.headers['content-length'] ?? 0));
-          res.writeHead(204, { 'Access-Control-Allow-Methods': ALLOW,
+          res.writeHead(204, { 'Access-Control-Allow-Methods': allow,
             'Access-Control-Allow-Headers': names.join(', '), 'Cache-Control': 'no-store' });
           res.end(); return;
         }
         const token = Buffer.from(req.headers.authorization ?? '');
         check(token.length === secret.length && timingSafeEqual(token, secret), 401);
-        check((webMetadata ? ['GET'] : ['OPTIONS', 'PROPFIND', 'HEAD', 'GET']).includes(req.method), 405);
+        check((webMetadata ? ['GET'] : allow.split(', ')).includes(req.method), 405);
         // Conditional forms outside this narrow read-only contract cannot
         // silently authorize a different version or force full materialization.
         check(req.headers['if-range'] === undefined && req.headers.if === undefined);
@@ -276,7 +280,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         timer = setTimeout(() => { controller.abort(); fail(res, 504); }, requestTimeoutMs);
         req.once('aborted', () => controller.abort());
         res.once('close', () => { if (!res.writableFinished) controller.abort(); });
-        const body = await requestBody(req, req.method, controller.signal);
+        const body = req.method === 'PUT' ? null : await requestBody(req, req.method, controller.signal);
         controller.signal.throwIfAborted();
         res.setHeader('Cache-Control', 'private, no-store');
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -288,12 +292,12 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
           res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': data.length });
           res.end(data); return;
         }
-        if (req.method === 'OPTIONS') { res.writeHead(204, { Allow: ALLOW, DAV: '1' }); res.end(); return; }
+        if (req.method === 'OPTIONS') { res.writeHead(204, { Allow: allow, DAV: '1' }); res.end(); return; }
         const requested = req.method === 'PROPFIND' ? properties(body) : null;
         if (requested) check(['0', '1'].includes(req.headers.depth), 403);
         // The original Files UI navigates by resource ID. Resolve only IDs in
         // this unlocked catalog, after authentication; never ask the origin.
-        if ((segments.length === 1 && isRecoveryResourceId(segments[0])
+        if (((segments.length === 1 || req.method === 'PUT' && segments.length === 2) && isRecoveryResourceId(segments[0])
           || isRecoverySpaceId(segments[0]))
           && typeof backend.resolveResourceId === 'function') {
           const resolved = await backend.resolveResourceId(segments[0], { signal: controller.signal });
@@ -307,7 +311,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
             check(segments.length <= 32);
           } else {
             check(recoveryResourceId(resolved) === segments[0], 503);
-            segments = resolved;
+            segments = req.method === 'PUT' ? [...resolved, ...segments.slice(1)] : resolved;
           }
         }
         const raw = await backend.stat(segments, { signal: controller.signal });
@@ -315,6 +319,19 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         const entry = raw === null ? null : metadata(raw, maxFileBytes);
         if (entry) res.setHeader('ETag', entry.etag);
         conditions(req.headers, entry, req.method);
+        if (req.method === 'PUT') {
+          check(!entry, 412); // Explicitly new files only, even if the UI requested overwrite.
+          check(segments.length === 2 && await backend.canUpload?.(segments.slice(0, -1)), 403);
+          const encodedLength = req.headers['content-length'];
+          check(encodedLength === undefined || /^(0|[1-9][0-9]*)$/u.test(encodedLength));
+          const length = encodedLength === undefined ? undefined : Number(encodedLength);
+          check(length === undefined || integer(length, 0, maxFileBytes), 413);
+          check(req.headers['transfer-encoding'] === undefined || req.headers['transfer-encoding'] === 'chunked');
+          const stored = metadata(await backend.put(segments, req, { signal: controller.signal, length }), maxFileBytes);
+          controller.signal.throwIfAborted();
+          res.writeHead(201, { ETag: stored.etag, 'Oc-Fileid': recoveryResourceId(segments), 'Content-Length': '0' });
+          res.end(); return;
+        }
         check(entry, 404);
         if (requested) {
           check(req.headers.range === undefined);
@@ -330,8 +347,10 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
               entries.push([[...segments, name], metadata(child, maxFileBytes)]);
             }
           }
+          const responses = await Promise.all(entries.map(async ([path, value]) =>
+            responseXML(path, value, requested, await backend.canUpload?.(path) === true)));
           const data = Buffer.from('<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:">'
-            + entries.map(([path, value]) => responseXML(path, value, requested)).join('') + '</d:multistatus>');
+            + responses.join('') + '</d:multistatus>');
           check(data.length <= 1024 ** 2, 503);
           res.writeHead(207, { 'Content-Type': 'application/xml; charset=utf-8', 'Content-Length': data.length });
           res.end(data); return;
@@ -367,7 +386,7 @@ export async function startPrivateDavServer({ backend, bearerToken, port = 0, al
         if (length === 0) res.end();
         else await pipeline(file.createReadStream({ autoClose: false, ...selected }), res, { signal: controller.signal });
       } catch (error) {
-        fail(res, error instanceof Rejected || error instanceof RecoveryMetadataError
+        fail(res, error instanceof Rejected || error instanceof RecoveryMetadataError || error instanceof OwnerUploadError
           ? error.status : controller.signal.aborted ? 504 : 503);
       } finally {
         clearTimeout(timer);

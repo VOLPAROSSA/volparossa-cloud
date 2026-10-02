@@ -22,6 +22,8 @@ jobs:
           node-version: '24.19.0'
       - name: Check the actual DAV adapter against synthetic HTTP fixtures
         run: node --test test/*.test.mjs
+      - name: Check owner-upload driver boundaries without starting a browser
+        run: python3 -B test/test_owner_upload_ui.py
       - name: Check provenance and whitespace
         run: |
           python3 -m json.tool third_party/opencloud-source.json > /dev/null

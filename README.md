@@ -19,6 +19,13 @@ trial also passes: original Files navigation and two verified downloads with the
 source and one provider offline. This is not a replacement account service,
 writable synchronization or second-device recovery.
 
+The next executable slice adds an explicitly enabled **owner-private upload
+space** beside the unchanged read-only imports. The connector now supports new
+file upload, encryption, core fragment deposit, durable catalog publication and
+restart/download; its targeted tests use real HTTP/GPG with an explicit storage
+fixture. The updated original Files/Uppy connection still needs a new native
+build and joined live-peer upload proof. [Upload setup and limits →](docs/OWNER_UPLOADS.md)
+
 ## One core, private files
 
 OpenCloud supplies the familiar file experience; VOLPAROSSA supplies shared

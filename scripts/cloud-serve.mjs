@@ -7,13 +7,14 @@ import { readPrivateJSON } from '../src/private-file.mjs';
 import { openPrivateCatalog } from '../src/private-catalog.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
 import { loadRecoveryWebAssets } from './recovery-web-assets.mjs';
+import { openOwnerUploads } from '../src/owner-uploads.mjs';
 
 export class CloudServeError extends Error {
   constructor(code) { super(code); this.name = 'CloudServeError'; this.code = code; }
 }
 const fail = () => { throw new CloudServeError('INVALID_PRIVATE_READ_CONFIGURATION'); };
 const FIELDS = new Set(['version', 'catalog', 'workDirectory', 'bearerToken', 'port',
-  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes', 'webDist']);
+  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes', 'webDist', 'ownerUploads']);
 const REQUIRED = ['version', 'catalog', 'workDirectory', 'bearerToken'];
 function integer(value, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) fail();
@@ -42,14 +43,22 @@ export function validateConfiguration(value) {
   if (value.webDist !== undefined && (typeof value.webDist !== 'string'
     || !value.webDist.startsWith('/') || /[\x00-\x1f\x7f]/u.test(value.webDist)
     || allowedOrigins.length > 0)) fail();
+  if (value.ownerUploads !== undefined && (!value.ownerUploads || typeof value.ownerUploads !== 'object'
+    || Object.keys(value.ownerUploads).sort().join(',') !== 'directory,space,storageConfig'
+    || !['directory', 'storageConfig'].every(key => typeof value.ownerUploads[key] === 'string'
+      && value.ownerUploads[key].startsWith('/') && !/[\x00-\x1f\x7f]/u.test(value.ownerUploads[key]))
+    || typeof value.ownerUploads.space !== 'string' || !value.ownerUploads.space
+    || ['.', '..'].includes(value.ownerUploads.space) || /[\\/\x00-\x1f\x7f]/u.test(value.ownerUploads.space)
+    || Buffer.byteLength(value.ownerUploads.space) > 1024 || allowedOrigins.length)) fail();
   return Object.freeze({
     version: 1, catalog: value.catalog, workDirectory: value.workDirectory,
     bearerToken: value.bearerToken, allowedOrigins: Object.freeze([...allowedOrigins]),
     ...(value.webDist !== undefined ? { webDist: value.webDist } : {}),
+    ...(value.ownerUploads !== undefined ? { ownerUploads: Object.freeze({ ...value.ownerUploads }) } : {}),
     port: integer(value.port ?? 0, 0, 65535),
     maxOpenBytes: integer(value.maxOpenBytes ?? 256 * 1024 ** 2, 1, 8 * 1024 ** 3),
     maxConcurrent: integer(value.maxConcurrent ?? 2, 1, 16),
-    requestTimeoutMs: integer(value.requestTimeoutMs ?? 120000, 100, 3600000),
+    requestTimeoutMs: integer(value.requestTimeoutMs ?? (value.ownerUploads ? 1800000 : 120000), 100, 3600000),
     maxRangeBytes: integer(value.maxRangeBytes ?? 16 * 1024 ** 2, 1, 16 * 1024 ** 2),
   });
 }
@@ -63,7 +72,7 @@ export function parseArguments(args) {
 }
 
 export async function startCloudService(value, {
-  signal, openCatalog = openPrivateCatalog, startServer = startPrivateDavServer,
+  signal, openCatalog = openPrivateCatalog, startServer = startPrivateDavServer, openUploads = openOwnerUploads,
 } = {}) {
   // The optional factories are module test seams, never executable configuration.
   const config = validateConfiguration(value);
@@ -87,17 +96,19 @@ export async function startCloudService(value, {
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     backend = await openCatalog({ catalog: config.catalog, workDirectory: config.workDirectory,
       maxOpenBytes: config.maxOpenBytes, maxOpenFiles: config.maxConcurrent }, { signal: cancel.signal });
+    if (config.ownerUploads) backend = await openUploads({ ...config.ownerUploads, workDirectory: config.workDirectory,
+      maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal });
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     server = await startServer({ backend, bearerToken: config.bearerToken, port: config.port,
       allowedOrigins: config.allowedOrigins, maxConcurrent: config.maxConcurrent,
       requestTimeoutMs: config.requestTimeoutMs, maxRangeBytes: config.maxRangeBytes,
       maxFileBytes: config.maxOpenBytes,
       ...(config.webDist ? { recoveryWeb: {
-        assetsFactory: origin => loadRecoveryWebAssets({ distDirectory: config.webDist, origin }),
+        assetsFactory: origin => loadRecoveryWebAssets({ distDirectory: config.webDist, origin, ownerUploads: !!config.ownerUploads }),
       } } : {}),
     });
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
-    return Object.freeze({ origin: server.origin, baseURL: server.baseURL, close });
+    return Object.freeze({ origin: server.origin, baseURL: server.baseURL, readOnly: !config.ownerUploads, close });
   } catch (error) { await close(); throw error; }
 }
 
@@ -115,7 +126,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
     service = await run(process.argv.slice(2), { signal: cancel.signal });
     console.log(JSON.stringify({ version: 1, kind: 'volparossa-cloud-private-read',
-      state: 'listening', origin: service.origin, readOnly: true, loopbackOnly: true,
+      state: 'listening', origin: service.origin, readOnly: service.readOnly, loopbackOnly: true,
       originalServerFallback: false, openCloudAccountService: false }));
     await new Promise(resolve => {
       if (cancel.signal.aborted) resolve();

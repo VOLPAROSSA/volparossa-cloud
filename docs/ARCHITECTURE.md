@@ -49,6 +49,13 @@ substitute for the live file-access path.
 
 [Encrypted catalog and source-off read service](OFFLINE_READ.md)
 
+The next [owner-private upload slice](OWNER_UPLOADS.md) retains that immutable
+selection and adds a separate, explicitly enrolled new-file space. Its existing
+Uppy/DAV PUT path encrypts before core fragment deposit and publishes a durable
+catalog entry only after confirmation. This is not permission to modify the
+original account or an implementation of shared synchronization; native UI/peer
+upload evidence is still open.
+
 ## Backend functions that must not disappear
 
 OpenCloud storage and application services have separate responsibilities:

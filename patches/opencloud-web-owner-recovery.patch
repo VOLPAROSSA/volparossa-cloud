@@ -1,3 +1,66 @@
+diff --git a/packages/web-app-files/src/components/CreateOrUploadMenu.vue b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
+index ddd56a3..85b5a80 100644
+--- a/packages/web-app-files/src/components/CreateOrUploadMenu.vue
++++ b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
+@@ -9,6 +9,7 @@
+     padding-size="small"
+   >
+     <oc-list
++      v-if="!configStore.options.volparossaOwnerUploads"
+       id="create-list"
+       :class="areFileExtensionsShown ? 'sm:min-w-xs' : null"
+       class="py-2 sm:first:pt-0 sm:last:pb-0"
+@@ -33,7 +34,7 @@
+       <li>
+         <resource-upload btn-class="w-full" :btn-label="$gettext('Files Upload')" />
+       </li>
+-      <li>
++      <li v-if="!configStore.options.volparossaOwnerUploads">
+         <resource-upload
+           btn-class="w-full"
+           :btn-label="$gettext('Folder Upload')"
+@@ -96,7 +97,7 @@
+         </oc-button>
+       </li>
+     </oc-list>
+-    <oc-list class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
++    <oc-list v-if="!configStore.options.volparossaOwnerUploads" class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
+       <li>
+         <oc-button
+           id="new-shortcut-btn"
+@@ -115,7 +116,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { FileAction, useResourcesStore, useUserStore, useSpacesStore } from '@opencloud-eu/web-pkg'
++import { FileAction, useResourcesStore, useUserStore, useSpacesStore, useConfigStore } from '@opencloud-eu/web-pkg'
+ 
+ import { computed, unref, useId } from 'vue'
+ import { Resource } from '@opencloud-eu/web-client'
+@@ -136,6 +137,7 @@ const { toggle } = defineProps<{
+ }>()
+ 
+ const userStore = useUserStore()
++const configStore = useConfigStore()
+ const language = useGettext()
+ const { $gettext } = language
+ 
+@@ -161,6 +163,7 @@ const { actions: createNewFileActions } = useFileActionsCreateNewFile({ space: c
+ 
+ const { getExtensionActions } = useFileActions()
+ const extensionActions = computed(() => {
++  if (configStore.options.volparossaOwnerUploads) return []
+   return getExtensionActions(uploadMenuExtensionPoint.id)
+ })
+ 
+@@ -171,6 +174,7 @@ const visibleCreateNewFileActions = computed(() => {
+ })
+ 
+ const createFileActionsGroups = computed((): FileAction[][] => {
++  if (configStore.options.volparossaOwnerUploads) return []
+   const result: FileAction[][] = []
+   const externalFileActions = unref(visibleCreateNewFileActions).filter(
+     ({ isExternal }) => isExternal
 diff --git a/packages/web-pkg/src/composables/download/useDownloadFile.ts b/packages/web-pkg/src/composables/download/useDownloadFile.ts
 index abfb288..e605f4c 100644
 --- a/packages/web-pkg/src/composables/download/useDownloadFile.ts
@@ -54,20 +117,72 @@ index abfb288..e605f4c 100644
      }
    }
 diff --git a/packages/web-pkg/src/composables/piniaStores/config/types.ts b/packages/web-pkg/src/composables/piniaStores/config/types.ts
-index 23c6c51..37be332 100644
+index 23c6c51..34d97f0 100644
 --- a/packages/web-pkg/src/composables/piniaStores/config/types.ts
 +++ b/packages/web-pkg/src/composables/piniaStores/config/types.ts
-@@ -26,6 +26,8 @@ const ScriptConfigSchema = z.object({
+@@ -26,6 +26,9 @@ const ScriptConfigSchema = z.object({
  export type ScriptConfig = z.infer<typeof ScriptConfigSchema>
  
  const OptionsConfigSchema = z.object({
 +  // Explicit owner-local recovery mode; never an upstream OIDC/account identity.
 +  volparossaOwnerRecovery: z.boolean().optional(),
++  volparossaOwnerUploads: z.boolean().optional(),
    announcement: z
      .object({
        bannerText: z.string().optional(),
+diff --git a/packages/web-pkg/src/composables/upload/useUpload.ts b/packages/web-pkg/src/composables/upload/useUpload.ts
+index b467888..8c22ec5 100644
+--- a/packages/web-pkg/src/composables/upload/useUpload.ts
++++ b/packages/web-pkg/src/composables/upload/useUpload.ts
+@@ -7,7 +7,7 @@ import {
+   OcUppyMeta,
+   UppyService
+ } from '../../services/uppy/uppyService'
+-import { useAuthStore, useCapabilityStore } from '../piniaStores'
++import { useAuthStore, useCapabilityStore, useConfigStore } from '../piniaStores'
+ import { XHRUploadOptions } from '@uppy/xhr-upload'
+ import { useClientService } from '../clientService'
+ import { useGettext } from 'vue3-gettext'
+@@ -21,6 +21,7 @@ export function useUpload(options: UploadOptions) {
+   const authStore = useAuthStore()
+   const clientService = useClientService()
+   const language = useGettext()
++  const configStore = useConfigStore()
+ 
+   const isTusSupported = computed(() => capabilityStore.tusMaxChunkSize > 0)
+ 
+@@ -78,7 +79,8 @@ export function useUpload(options: UploadOptions) {
+ 
+   const xhrOptions = computed<XHRUploadOptions<OcUppyMeta, OcUppyBody>>(() => {
+     return {
+-      timeout: 60000,
++      timeout: configStore.options.volparossaOwnerUploads ? 1800000 : 60000,
++      ...(configStore.options.volparossaOwnerUploads ? { limit: 1 } : {}),
+       endpoint: '',
+       headers: (file) => ({
+         'x-oc-mtime': ((file?.data as File)?.lastModified / 1000).toFixed(0),
+diff --git a/packages/web-pkg/src/services/uppy/uppyService.ts b/packages/web-pkg/src/services/uppy/uppyService.ts
+index 8c79a21..946e974 100644
+--- a/packages/web-pkg/src/services/uppy/uppyService.ts
++++ b/packages/web-pkg/src/services/uppy/uppyService.ts
+@@ -207,13 +207,14 @@ export class UppyService {
+     this.uppy.use(Tus, tusPluginOptions)
+   }
+ 
+-  useXhr({ headers, timeout, endpoint }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
++  useXhr({ headers, timeout, endpoint, limit }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
+     const xhrPluginOptions: XHRUploadOptions<OcUppyMeta, OcUppyBody> = {
+       endpoint,
+       method: 'put',
+       headers,
+       formData: false,
+       timeout,
++      ...(limit === undefined ? {} : { limit }),
+       getResponseData() {
+         return {}
+       }
 diff --git a/packages/web-runtime/src/components/Topbar/UserMenu.vue b/packages/web-runtime/src/components/Topbar/UserMenu.vue
-index ca69b9d..b48d6e2 100644
+index ca69b9d..3320a4e 100644
 --- a/packages/web-runtime/src/components/Topbar/UserMenu.vue
 +++ b/packages/web-runtime/src/components/Topbar/UserMenu.vue
 @@ -36,7 +36,15 @@
@@ -76,7 +191,7 @@ index ca69b9d..b48d6e2 100644
        <oc-list class="user-menu-list">
 -        <template v-if="!user?.onPremisesSamAccountName">
 +        <template v-if="configStore.options.volparossaOwnerRecovery">
-+          <li class="p-2">Private recovery · Read only</li>
++          <li class="p-2">{{ configStore.options.volparossaOwnerUploads ? 'Owner-private uploads · Imported files read only' : 'Private recovery · Read only' }}</li>
 +          <li>
 +            <oc-button id="volparossa-recovery-close" appearance="raw" @click="authService.logoutUser()">
 +              Close recovery
@@ -104,7 +219,7 @@ index ca69b9d..b48d6e2 100644
  const { user } = storeToRefs(userStore)
  
 diff --git a/packages/web-runtime/src/index.ts b/packages/web-runtime/src/index.ts
-index 9e584c0..7bc90c5 100644
+index 9e584c0..bab03a3 100644
 --- a/packages/web-runtime/src/index.ts
 +++ b/packages/web-runtime/src/index.ts
 @@ -38,7 +38,87 @@ import { createPinia } from 'pinia'
@@ -135,7 +250,7 @@ index 9e584c0..7bc90c5 100644
 +  const heading = document.createElement('h1')
 +  heading.textContent = 'Private recovery · OpenCloud Files'
 +  const explanation = document.createElement('p')
-+  explanation.textContent = 'Read selected private files through your local VOLPAROSSA service. This is not an OpenCloud account login and does not grant sharing or write access.'
++  explanation.textContent = config.options.volparossaOwnerUploads ? 'Read selected files and upload new files to your separate owner-private space. This is not an OpenCloud account login and does not grant sharing or original account writes.' : 'Read selected private files through your local VOLPAROSSA service. This is not an OpenCloud account login and does not grant sharing or write access.'
 +  const form = document.createElement('form')
 +  const label = document.createElement('label')
 +  label.textContent = 'Local recovery access token'
@@ -173,7 +288,7 @@ index 9e584c0..7bc90c5 100644
 +        if (!response.ok) throw new Error('Access refused')
 +        const session = await response.json()
 +        if (session.version !== 1 || session.authority !== 'owner-local-catalog'
-+            || session.readOnly !== true || session.upstreamAccount !== false
++            || session.readOnly !== (config.options.volparossaOwnerUploads !== true) || session.upstreamAccount !== false
 +            || session.owner?.id !== 'volparossa-owner-recovery'
 +            || session.owner?.displayName !== 'Private recovery') throw new Error('Wrong authority')
 +        user.setUser({ id: session.owner.id, displayName: session.owner.displayName })
