@@ -38,10 +38,33 @@ test('only verified assets and public recovery configuration enter map', async (
     const config = JSON.parse(assets.get('/config.json').data);
     assert.deepEqual(config.apps, ['files']);
     assert.equal(config.options.volparossaOwnerRecovery, true);
+    assert.equal(Object.hasOwn(config.options, 'volparossaOwnerUploads'), false);
+    assert.deepEqual(config.options.disabledExtensions,
+      ['com.github.opencloud-eu.web.files.floating-action-button']);
     assert.equal(config.options.tokenStorageLocal, false);
     assert.equal(JSON.stringify(config).includes('bearer'), false);
     assert.deepEqual(config.external_apps, []);
     await assert.rejects(loadRecoveryWebAssets({ distDirectory: f.directory, origin: 'https://outside.example' }));
+  } finally { await f.close(); }
+});
+
+test('explicit upload mode remains Files-only, owner-scoped and distinct from read-only imported files', async () => {
+  const f = await fixture();
+  try {
+    const assets = await loadRecoveryWebAssets({ distDirectory: f.directory, origin: 'http://127.0.0.1:45678', ownerUploads: true });
+    const config = JSON.parse(assets.get('/config.json').data);
+    assert.equal(config.options.volparossaOwnerRecovery, true);
+    assert.equal(config.options.volparossaOwnerUploads, true);
+    // The pinned Files application exposes CreateOrUploadMenu through this FAB.
+    // Enabling it is not upload authority: each space still checks canUpload.
+    assert.deepEqual(config.options.disabledExtensions, []);
+    assert.deepEqual(config.apps, ['files']);
+    assert.match(config.options.announcement.bannerText, /Imported files remain read only/u);
+    assert.equal(JSON.stringify(config).includes('bearer'), false);
+    const patch = await readFile(new URL('../patches/opencloud-web-owner-recovery.patch', import.meta.url), 'utf8');
+    assert.match(patch, /limit: 1/u);
+    assert.match(patch, /v-if="!configStore.options.volparossaOwnerUploads"/u);
+    assert.match(patch, /session.readOnly !== \(config.options.volparossaOwnerUploads !== true\)/u);
   } finally { await f.close(); }
 });
 
