@@ -1,3 +1,66 @@
+diff --git a/packages/web-app-files/src/components/CreateOrUploadMenu.vue b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
+index ddd56a3..85b5a80 100644
+--- a/packages/web-app-files/src/components/CreateOrUploadMenu.vue
++++ b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
+@@ -9,6 +9,7 @@
+     padding-size="small"
+   >
+     <oc-list
++      v-if="!configStore.options.volparossaOwnerUploads"
+       id="create-list"
+       :class="areFileExtensionsShown ? 'sm:min-w-xs' : null"
+       class="py-2 sm:first:pt-0 sm:last:pb-0"
+@@ -33,7 +34,7 @@
+       <li>
+         <resource-upload btn-class="w-full" :btn-label="$gettext('Files Upload')" />
+       </li>
+-      <li>
++      <li v-if="!configStore.options.volparossaOwnerUploads">
+         <resource-upload
+           btn-class="w-full"
+           :btn-label="$gettext('Folder Upload')"
+@@ -96,7 +97,7 @@
+         </oc-button>
+       </li>
+     </oc-list>
+-    <oc-list class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
++    <oc-list v-if="!configStore.options.volparossaOwnerUploads" class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
+       <li>
+         <oc-button
+           id="new-shortcut-btn"
+@@ -115,7 +116,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { FileAction, useResourcesStore, useUserStore, useSpacesStore } from '@opencloud-eu/web-pkg'
++import { FileAction, useResourcesStore, useUserStore, useSpacesStore, useConfigStore } from '@opencloud-eu/web-pkg'
+ 
+ import { computed, unref, useId } from 'vue'
+ import { Resource } from '@opencloud-eu/web-client'
+@@ -136,6 +137,7 @@ const { toggle } = defineProps<{
+ }>()
+ 
+ const userStore = useUserStore()
++const configStore = useConfigStore()
+ const language = useGettext()
+ const { $gettext } = language
+ 
+@@ -161,6 +163,7 @@ const { actions: createNewFileActions } = useFileActionsCreateNewFile({ space: c
+ 
+ const { getExtensionActions } = useFileActions()
+ const extensionActions = computed(() => {
++  if (configStore.options.volparossaOwnerUploads) return []
+   return getExtensionActions(uploadMenuExtensionPoint.id)
+ })
+ 
+@@ -171,6 +174,7 @@ const visibleCreateNewFileActions = computed(() => {
+ })
+ 
+ const createFileActionsGroups = computed((): FileAction[][] => {
++  if (configStore.options.volparossaOwnerUploads) return []
+   const result: FileAction[][] = []
+   const externalFileActions = unref(visibleCreateNewFileActions).filter(
+     ({ isExternal }) => isExternal
 diff --git a/packages/web-pkg/src/composables/download/useDownloadFile.ts b/packages/web-pkg/src/composables/download/useDownloadFile.ts
 index abfb288..e605f4c 100644
 --- a/packages/web-pkg/src/composables/download/useDownloadFile.ts
@@ -10,19 +73,19 @@ index abfb288..e605f4c 100644
 +import { useConfigStore, useExtensionRegistry, useMessages, useUserStore } from '../piniaStores'
  import { Resource, SpaceResource } from '@opencloud-eu/web-client'
  import { useGetMatchingSpace } from '../spaces'
-
+ 
 @@ -17,6 +17,7 @@ export const useDownloadFile = (options?: DownloadFileOptions) => {
    const { $gettext } = useGettext()
    const userStore = useUserStore()
    const extensionRegistry = useExtensionRegistry()
 +  const configStore = useConfigStore()
-
+ 
    const downloadFile = async (
      space: SpaceResource = null,
 @@ -28,6 +29,19 @@ export const useDownloadFile = (options?: DownloadFileOptions) => {
          space = getMatchingSpace(file)
        }
-
+ 
 +      if (configStore.options.volparossaOwnerRecovery === true) {
 +        if (version || file.isFolder) throw new Error('Recovery supports selected current files only')
 +        const response = await clientService.webdav.getFileContents(
@@ -54,12 +117,12 @@ index abfb288..e605f4c 100644
      }
    }
 diff --git a/packages/web-pkg/src/composables/piniaStores/config/types.ts b/packages/web-pkg/src/composables/piniaStores/config/types.ts
-index 23c6c51..37be332 100644
+index 23c6c51..34d97f0 100644
 --- a/packages/web-pkg/src/composables/piniaStores/config/types.ts
 +++ b/packages/web-pkg/src/composables/piniaStores/config/types.ts
 @@ -26,6 +26,9 @@ const ScriptConfigSchema = z.object({
  export type ScriptConfig = z.infer<typeof ScriptConfigSchema>
-
+ 
  const OptionsConfigSchema = z.object({
 +  // Explicit owner-local recovery mode; never an upstream OIDC/account identity.
 +  volparossaOwnerRecovery: z.boolean().optional(),
@@ -67,8 +130,59 @@ index 23c6c51..37be332 100644
    announcement: z
      .object({
        bannerText: z.string().optional(),
+diff --git a/packages/web-pkg/src/composables/upload/useUpload.ts b/packages/web-pkg/src/composables/upload/useUpload.ts
+index b467888..8c22ec5 100644
+--- a/packages/web-pkg/src/composables/upload/useUpload.ts
++++ b/packages/web-pkg/src/composables/upload/useUpload.ts
+@@ -7,7 +7,7 @@ import {
+   OcUppyMeta,
+   UppyService
+ } from '../../services/uppy/uppyService'
+-import { useAuthStore, useCapabilityStore } from '../piniaStores'
++import { useAuthStore, useCapabilityStore, useConfigStore } from '../piniaStores'
+ import { XHRUploadOptions } from '@uppy/xhr-upload'
+ import { useClientService } from '../clientService'
+ import { useGettext } from 'vue3-gettext'
+@@ -21,6 +21,7 @@ export function useUpload(options: UploadOptions) {
+   const authStore = useAuthStore()
+   const clientService = useClientService()
+   const language = useGettext()
++  const configStore = useConfigStore()
+ 
+   const isTusSupported = computed(() => capabilityStore.tusMaxChunkSize > 0)
+ 
+@@ -78,7 +79,8 @@ export function useUpload(options: UploadOptions) {
+ 
+   const xhrOptions = computed<XHRUploadOptions<OcUppyMeta, OcUppyBody>>(() => {
+     return {
+-      timeout: 60000,
++      timeout: configStore.options.volparossaOwnerUploads ? 1800000 : 60000,
++      ...(configStore.options.volparossaOwnerUploads ? { limit: 1 } : {}),
+       endpoint: '',
+       headers: (file) => ({
+         'x-oc-mtime': ((file?.data as File)?.lastModified / 1000).toFixed(0),
+diff --git a/packages/web-pkg/src/services/uppy/uppyService.ts b/packages/web-pkg/src/services/uppy/uppyService.ts
+index 8c79a21..946e974 100644
+--- a/packages/web-pkg/src/services/uppy/uppyService.ts
++++ b/packages/web-pkg/src/services/uppy/uppyService.ts
+@@ -207,13 +207,14 @@ export class UppyService {
+     this.uppy.use(Tus, tusPluginOptions)
+   }
+ 
+-  useXhr({ headers, timeout, endpoint }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
++  useXhr({ headers, timeout, endpoint, limit }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
+     const xhrPluginOptions: XHRUploadOptions<OcUppyMeta, OcUppyBody> = {
+       endpoint,
+       method: 'put',
+       headers,
+       formData: false,
+       timeout,
++      ...(limit === undefined ? {} : { limit }),
+       getResponseData() {
+         return {}
+       }
 diff --git a/packages/web-runtime/src/components/Topbar/UserMenu.vue b/packages/web-runtime/src/components/Topbar/UserMenu.vue
-index ca69b9d..b48d6e2 100644
+index ca69b9d..3320a4e 100644
 --- a/packages/web-runtime/src/components/Topbar/UserMenu.vue
 +++ b/packages/web-runtime/src/components/Topbar/UserMenu.vue
 @@ -36,7 +36,15 @@
@@ -101,11 +215,11 @@ index ca69b9d..b48d6e2 100644
  const authService = useAuthService()
  const authStore = useAuthStore()
 +const configStore = useConfigStore()
-
+ 
  const { user } = storeToRefs(userStore)
-
+ 
 diff --git a/packages/web-runtime/src/index.ts b/packages/web-runtime/src/index.ts
-index 9e584c0..7bc90c5 100644
+index 9e584c0..bab03a3 100644
 --- a/packages/web-runtime/src/index.ts
 +++ b/packages/web-runtime/src/index.ts
 @@ -38,7 +38,87 @@ import { createPinia } from 'pinia'
@@ -194,15 +308,15 @@ index 9e584c0..7bc90c5 100644
 +    })
 +  })
 +}
-
+ 
  export const bootstrapApp = async (configurationPath: string, appsReadyCallback: () => void) => {
    const pinia = createPinia()
 @@ -73,6 +153,7 @@ export const bootstrapApp = async (configurationPath: string, appsReadyCallback:
    const gettext = announceGettext({ app, availableLanguages: supportedLanguages })
-
+ 
    const clientService = announceClientService({ app, configStore, authStore })
 +  await initializeOwnerRecovery(configStore, authStore, userStore)
-
+ 
    // Registered here (not at router module load) so the guard can receive the
    // `clientService` it needs to lazy-load mount-point spaces. Registering it
 @@ -118,7 +199,9 @@ export const bootstrapApp = async (configurationPath: string, appsReadyCallback:
@@ -215,7 +329,7 @@ index 9e584c0..7bc90c5 100644
 +    ]),
      ...(configStore.apps.includes('external') ? [appProviderService.loadData()] : [])
    ])
-
+ 
 diff --git a/packages/web-runtime/src/services/auth/authService.ts b/packages/web-runtime/src/services/auth/authService.ts
 index d6ea81c..949ab11 100644
 --- a/packages/web-runtime/src/services/auth/authService.ts
@@ -237,7 +351,7 @@ index d6ea81c..949ab11 100644
          clientService: this.clientService,
 @@ -392,6 +400,11 @@ export class AuthService implements AuthServiceInterface {
    }
-
+ 
    public async logoutUser() {
 +    if (this.configStore.options.volparossaOwnerRecovery === true) {
 +      this.resetStateAfterUserLogout()
@@ -247,114 +361,3 @@ index d6ea81c..949ab11 100644
      const endSessionEndpoint = await this.userManager.metadataService?.getEndSessionEndpoint()
      if (!endSessionEndpoint) {
        await this.userManager.removeUser()
-diff --git a/packages/web-app-files/src/components/CreateOrUploadMenu.vue b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
---- a/packages/web-app-files/src/components/CreateOrUploadMenu.vue
-+++ b/packages/web-app-files/src/components/CreateOrUploadMenu.vue
-@@ -9,6 +9,7 @@
-     padding-size="small"
-   >
-     <oc-list
-+      v-if="!configStore.options.volparossaOwnerUploads"
-       id="create-list"
-       :class="areFileExtensionsShown ? 'sm:min-w-xs' : null"
-       class="py-2 sm:first:pt-0 sm:last:pb-0"
-@@ -33,7 +34,7 @@
-       <li>
-         <resource-upload btn-class="w-full" :btn-label="$gettext('Files Upload')" />
-       </li>
--      <li>
-+      <li v-if="!configStore.options.volparossaOwnerUploads">
-         <resource-upload
-           btn-class="w-full"
-           :btn-label="$gettext('Folder Upload')"
-@@ -105,7 +106,7 @@
-         </oc-button>
-       </li>
-     </oc-list>
--    <oc-list class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
-+    <oc-list v-if="!configStore.options.volparossaOwnerUploads" class="py-2 sm:first:pt-0 sm:last:pb-0 border-t">
-       <li>
-         <oc-button
-           id="new-shortcut-btn"
-@@ -128,7 +129,7 @@
- </template>
-
- <script setup lang="ts">
--import { FileAction, useResourcesStore, useUserStore, useSpacesStore } from '@opencloud-eu/web-pkg'
-+import { FileAction, useResourcesStore, useUserStore, useSpacesStore, useConfigStore } from '@opencloud-eu/web-pkg'
-
- import { computed, unref, useId } from 'vue'
- import { Resource } from '@opencloud-eu/web-client'
-@@ -151,6 +152,7 @@ const { toggle } = defineProps<{
- }>()
-
- const userStore = useUserStore()
-+const configStore = useConfigStore()
- const language = useGettext()
- const { $gettext } = language
-
-@@ -177,6 +179,7 @@ const { actions: createNewFileActions } = useFileActionsCreateNewFile({ space: curre
-
- const { getExtensionActions } = useFileActions()
- const extensionActions = computed(() => {
-+  if (configStore.options.volparossaOwnerUploads) return []
-   return getExtensionActions(uploadMenuExtensionPoint.id)
- })
-
-@@ -187,6 +190,7 @@ const visibleCreateNewFileActions = computed(() => {
- })
-
- const createFileActionsGroups = computed((): FileAction[][] => {
-+  if (configStore.options.volparossaOwnerUploads) return []
-   const result: FileAction[][] = []
-   const externalFileActions = unref(visibleCreateNewFileActions).filter(
-     ({ isExternal }) => isExternal
-diff --git a/packages/web-pkg/src/composables/upload/useUpload.ts b/packages/web-pkg/src/composables/upload/useUpload.ts
---- a/packages/web-pkg/src/composables/upload/useUpload.ts
-+++ b/packages/web-pkg/src/composables/upload/useUpload.ts
-@@ -7,7 +7,7 @@ import {
-   OcUppyMeta,
-   UppyService
- } from '../../services/uppy/uppyService'
--import { useAuthStore, useCapabilityStore } from '../piniaStores'
-+import { useAuthStore, useCapabilityStore, useConfigStore } from '../piniaStores'
- import { XHRUploadOptions } from '@uppy/xhr-upload'
- import { useClientService } from '../clientService'
- import { useGettext } from 'vue3-gettext'
-@@ -20,6 +20,7 @@ export function useUpload(options: UploadOptions) {
-   const authStore = useAuthStore()
-   const clientService = useClientService()
-   const language = useGettext()
-+  const configStore = useConfigStore()
-
-   const isTusSupported = computed(() => capabilityStore.tusMaxChunkSize > 0)
-
-@@ -78,7 +79,8 @@ export function useUpload(options: UploadOptions) {
-
-   const xhrOptions = computed<XHRUploadOptions<OcUppyMeta, OcUppyBody>>(() => {
-     return {
--      timeout: 60000,
-+      timeout: configStore.options.volparossaOwnerUploads ? 1800000 : 60000,
-+      ...(configStore.options.volparossaOwnerUploads ? { limit: 1 } : {}),
-       endpoint: '',
-       headers: (file) => ({
-         'x-oc-mtime': ((file?.data as File)?.lastModified / 1000).toFixed(0),
-diff --git a/packages/web-pkg/src/services/uppy/uppyService.ts b/packages/web-pkg/src/services/uppy/uppyService.ts
---- a/packages/web-pkg/src/services/uppy/uppyService.ts
-+++ b/packages/web-pkg/src/services/uppy/uppyService.ts
-@@ -208,13 +208,14 @@ export class UppyService {
-     this.uppy.use(Tus, tusPluginOptions)
-   }
-
--  useXhr({ headers, timeout, endpoint }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
-+  useXhr({ headers, timeout, endpoint, limit }: XHRUploadOptions<OcUppyMeta, OcUppyBody>) {
-     const xhrPluginOptions: XHRUploadOptions<OcUppyMeta, OcUppyBody> = {
-       endpoint,
-       method: 'put',
-       headers,
-       formData: false,
-       timeout,
-+      ...(limit === undefined ? {} : { limit }),
-       getResponseData() {
-         return {}
-       }
