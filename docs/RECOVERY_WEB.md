@@ -88,9 +88,9 @@ Thirty catalog/HTTP checks, nine service/asset checks and the original pinned SD
 read check also pass. Local catalog checks use real GPG and explicitly injected
 storage, not live storage peers.
 
-The separate protected-peer SDK trial already proves the core-backed read service
-with the source and one provider unavailable. A combined original-UI/peer trial
-remains required. Account enrollment, cross-device recovery of catalog and keys,
+The separate protected-peer SDK trial proves the core-backed read service
+with the source and one provider unavailable. The combined original-UI/peer trial
+also passes on the exact later sources recorded below. Account enrollment, cross-device recovery of catalog and keys,
 writable synchronization, conflict resolution and sharing/revocation are still
 open work; this mode does not make all of OpenCloud server-independent.
 
@@ -103,4 +103,18 @@ Web mode now retains at least eight transport sockets, without increasing its
 private request/restoration concurrency. The focused real-HTTP regression fails
 with the old limit and passes with the correction. The local synthetic-backend UI
 diagnostic confirms wrong-token rejection, successful unlock and read-only file
-navigation; this correction still requires a new joined peer-storage UI trial.
+navigation; that local diagnostic alone did not establish joined peer-storage UI operation.
+
+The corrected [joined run `36940326270`](https://github.com/VOLPAROSSA/volparossa/actions/runs/36940326270)
+**passes** on core `d7403106837962c66cd0af0e049236785d8053cb` with Cloud
+`63bba5d1163a69e1ee6b4218c9e7462d941f22f7`, source-built OpenCloud Web8
+`11e699ac82fda4dd113ac3ceb2ecb2dd74574045` and Firefox ESR140.16.0. The source is
+stopped, local ciphertext removed and provider A offline throughout six actual
+protected B/C reconstructions. The original Files interface authenticates, lists
+and navigates the selection, and completes two 786,433-byte downloads checked
+against the original file hash. Wrong-token denial, logout/relocking, retained
+charges, non-consuming restores, final zero provider leases and private/host-state
+cleanup pass. Exact-source replay of the 44 original artifacts passes; original
+ZIP SHA-256: `9815e1ee6435f39a03c9b566008068e471aa4ac2ad405006df530044b65ffbab`.
+This is a selected owner-local read-only recovery proof, not account/ACL recovery,
+writable synchronization, sharing or a fully server-independent OpenCloud service.

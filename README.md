@@ -14,9 +14,10 @@ and authenticated, read-only DAV service make selected files browsable through
 the OpenCloud Web SDK. That SDK-to-peer read path now also passes its own live
 trial: listing, full/range reads, authentication checks and private cleanup with
 the source and one provider offline. A source-built **OpenCloud Files interface**
-now has an explicit owner-local, read-only recovery mode. Its browser checks are
-separate from the protected-peer proof; this is not a replacement account
-service, writable synchronization or second-device recovery.
+now has an explicit owner-local, read-only recovery mode. Its joined browser/peer
+trial also passes: original Files navigation and two verified downloads with the
+source and one provider offline. This is not a replacement account service,
+writable synchronization or second-device recovery.
 
 ## One core, private files
 
@@ -58,11 +59,11 @@ Storing fragments is only one part of keeping OpenCloud usable while its origina
 server is off. Accounts, directory metadata, permissions, sharing and client
 synchronization must remain available too.
 
-The first complete milestone is **private, source-off file browsing**: import
-authorized files and their catalog, recover them on an authorized device, and
-list/read them through an actual OpenCloud client integration after the original
-server is stopped. This will not, by itself, prove complete compatibility with
-unmodified web, desktop or mobile clients.
+The first demonstrated application milestone is **private, source-off file browsing**:
+import explicitly selected files and their catalog, then recover and read them
+through the original Files interface after the synthetic source is stopped.
+This uses an owner-local recovery adapter, not ordinary OpenCloud account login;
+it does not prove complete compatibility with unmodified web, desktop or mobile clients.
 
 Further integration points include:
 
@@ -151,6 +152,16 @@ are unavailable. All 32 required protected MPTCP/TLS exchanges, retained charges
 all-copy deletion and unchanged host state pass. Exact-source replay of the
 44 original artifacts also passes. Range reads currently restore the whole
 encrypted file before returning the requested bytes.
+
+The subsequent [original Files UI/peer trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/36940326270)
+passes for Cloud `63bba5d1163a69e1ee6b4218c9e7462d941f22f7` and core
+`d7403106837962c66cd0af0e049236785d8053cb`. With the source stopped, local ciphertext
+removed and provider A offline, six protected reconstructions from B/C serve the
+direct restore, catalog, SDK reads and two independently verified original UI
+downloads. Authentication denial, logout, non-consuming reads, all-copy retirement
+and unchanged host state pass. The earlier failed UI trials remain recorded in
+[the recovery-interface evidence](docs/RECOVERY_WEB.md); accounts, writes, sharing,
+cross-device recovery and synchronization remain open.
 
 ## Upstream and licensing
 
