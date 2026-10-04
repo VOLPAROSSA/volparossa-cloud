@@ -30,6 +30,22 @@ CONTENT_SHA = hashlib.sha256(CONTENT).hexdigest()
 STAGES = frozenset(('input', 'browser_start', 'locked_ui', 'wrong_token', 'unlock',
     'upload_menu', 'file_selection', 'upload_commit', 'reload', 'original_download_1',
     'original_download_2', 'logout', 'cleanup'))
+# Pinned Uppy core 6.0.1 fetcher permits three retries after the initial PUT.
+# Observe that existing native behavior; do not start or retry requests here.
+MAX_UPLOAD_ATTEMPTS = 4
+UPLOAD_OBSERVER = (
+    "window.__vpUpload={puts:0,completed:0,created:0,last_status:0,statuses:[]};"
+    "const open=XMLHttpRequest.prototype.open;"
+    "XMLHttpRequest.prototype.open=function(method,url,...rest){"
+    "if(method.toUpperCase()==='PUT'){"
+    "window.__vpUpload.puts=Math.min(5,window.__vpUpload.puts+1);"
+    "this.addEventListener('loadend',()=>{"
+    "window.__vpUpload.completed=Math.min(5,window.__vpUpload.completed+1);"
+    "window.__vpUpload.last_status=this.status;"
+    "if(window.__vpUpload.statuses.length<4)window.__vpUpload.statuses.push(this.status);"
+    "if(this.status===201)window.__vpUpload.created=Math.min(5,window.__vpUpload.created+1)"
+    "},{once:true})}return open.call(this,method,url,...rest)};"
+)
 
 
 class UIConditionTimeout(TimeoutError):
@@ -38,13 +54,27 @@ class UIConditionTimeout(TimeoutError):
 
 def upload_observation(value):
     """Closed counters only: never retain XHR URLs, headers or response bodies."""
-    require(type(value) is dict and set(value) == {'puts', 'completed', 'created', 'last_status'})
-    require(all(type(value[key]) is int and 0 <= value[key] <= 65535
+    require(type(value) is dict and set(value) == {'puts', 'completed', 'created', 'last_status', 'statuses'})
+    require(all(type(value[key]) is int and 0 <= value[key] <= MAX_UPLOAD_ATTEMPTS
                 for key in ('puts', 'completed', 'created')))
     require(value['created'] <= value['completed'] <= value['puts'])
     require(type(value['last_status']) is int
         and (value['last_status'] == 0 or 100 <= value['last_status'] <= 599))
-    return dict(value)
+    statuses = value['statuses']
+    require(type(statuses) is list and len(statuses) == value['completed']
+        and all(type(status) is int and (status == 0 or 100 <= status <= 599) for status in statuses))
+    require(value['created'] == statuses.count(201)
+        and value['last_status'] == (statuses[-1] if statuses else 0))
+    return dict(value, statuses=list(statuses))
+
+
+def upload_receipt(value):
+    """One logical success after only the pinned uploader's bounded retries."""
+    value = upload_observation(value)
+    require(1 <= value['puts'] == value['completed'] <= MAX_UPLOAD_ATTEMPTS
+        and value['created'] == 1 and value['last_status'] == 201
+        and all(not 200 <= status < 300 for status in value['statuses'][:-1]))
+    return value
 
 
 def failure_kind(error):
@@ -168,6 +198,7 @@ def run(mode, root, value):
         reload_reauthenticated=False, file_downloads_verified=0, wrong_token_denied=False,
         logout_relocks=False, token_absent_from_url_and_web_storage=False,
         browser_stopped_and_joined=False, private_profile_removed=False,
+        upload_receipt=None,
         browser_version=None, bytes=len(CONTENT), sha256=CONTENT_SHA,
         peer_storage_proven=False, service_restart_owned_by_parent=True,
         source_shutdown_owned_by_parent=True, owner_secrets_exported=False)
@@ -213,7 +244,7 @@ def run(mode, root, value):
                     require(client.script("return !document.getElementById('files-folder-upload-input') && !document.getElementById('new-folder-btn') && !document.getElementById('new-shortcut-btn')"))
                     # Observe only the real native Uppy XHR's bounded completion
                     # facts; this observer does not issue or replace any request.
-                    client.script("window.__vpUpload={puts:0,completed:0,created:0,last_status:0};const open=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url,...rest){if(method.toUpperCase()==='PUT'){window.__vpUpload.puts=Math.min(65535,window.__vpUpload.puts+1);this.addEventListener('loadend',()=>{window.__vpUpload.completed=Math.min(65535,window.__vpUpload.completed+1);window.__vpUpload.last_status=this.status;if(this.status===201)window.__vpUpload.created=Math.min(65535,window.__vpUpload.created+1)},{once:true})}return open.call(this,method,url,...rest)};")
+                    client.script(UPLOAD_OBSERVER)
                     with (work / 'uploads' / NAME).open('xb') as output:
                         os.fchmod(output.fileno(), 0o600)
                         output.write(CONTENT)
@@ -225,7 +256,7 @@ def run(mode, root, value):
                     report['original_file_input_used'] = True
                     report['stage'] = 'upload_commit'
                     client.wait_upload(seconds=1800)
-                    require(client.script("return window.__vpUpload.puts===1 && window.__vpUpload.created===1"))
+                    report['upload_receipt'] = upload_receipt(client.script('return window.__vpUpload'))
                     report['upload_201_observed'] = True
                     client.wait(listed)
                     report['uploaded_file_listed'] = True

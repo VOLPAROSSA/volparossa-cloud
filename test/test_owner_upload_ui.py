@@ -24,16 +24,35 @@ def settings():
 
 class OwnerUploadUIBoundary(unittest.TestCase):
     def test_upload_observations_are_closed_bounded_and_consistent(self):
-        valid = dict(puts=1, completed=1, created=1, last_status=201)
+        valid = dict(puts=1, completed=1, created=1, last_status=201, statuses=[201])
         self.assertEqual(UI['upload_observation'](valid), valid)
         for change in (dict(puts=True), dict(completed=65536), dict(created=2),
                        dict(last_status=99), dict(last_status='201'),
+                       dict(statuses=[]), dict(statuses=[True]), dict(statuses=[200]),
                        dict(response='PRIVATE_SENTINEL'), dict(url='private-name')):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 UI['upload_observation'](dict(valid, **change))
         self.assertEqual(UI['failure_kind'](UI['UIConditionTimeout']('private')),
                          'condition_timeout')
         self.assertEqual(UI['failure_kind'](TimeoutError('private')), 'transport_timeout')
+
+    def test_native_retry_receipt_requires_one_final_success_and_all_attempts_finished(self):
+        def receipt(statuses):
+            return dict(puts=len(statuses), completed=len(statuses), created=statuses.count(201),
+                last_status=statuses[-1] if statuses else 0, statuses=statuses)
+        for statuses in ([201], [503, 201], [0, 401, 503, 201]):
+            value = receipt(statuses)
+            result = UI['upload_receipt'](value)
+            self.assertEqual(result, value)
+            self.assertIsNot(result['statuses'], value['statuses'])
+        for statuses in ([], [0], [503], [200, 201], [204, 201], [299, 201],
+                         [201, 503], [201, 201], [0, 503, 503, 503, 201]):
+            with self.subTest(statuses=statuses), self.assertRaises(ValueError):
+                UI['upload_receipt'](receipt(statuses))
+        for change in (dict(puts=2), dict(completed=2), dict(created=0), dict(puts=True),
+                       dict(last_status=503), dict(statuses=[201, 503]), dict(raw='PRIVATE')):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                UI['upload_receipt'](dict(receipt([201]), **change))
 
     def test_exact_independently_derived_fixture_and_loopback_input(self):
         body = bytes(range(256)) * 1024 + b'U'
@@ -116,7 +135,7 @@ class OwnerUploadUIBoundary(unittest.TestCase):
         browser.wait.assert_called_once_with(timeout=15)
 
     def test_failed_upload_retains_only_last_closed_observation_and_cleanup(self):
-        observation = dict(puts=1, completed=0, created=0, last_status=0)
+        observation = dict(puts=1, completed=0, created=0, last_status=0, statuses=[])
 
         class FailedUpload:
             def __init__(self, _port):

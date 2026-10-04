@@ -66,9 +66,11 @@ DAV import receipts keep their original source/version checks. Relabeling an
 upload as a DAV import fails authenticated restoration.
 
 After an incomplete deposit, the file is not listed and its journal/ciphertext
-remain retained. An **explicit retry of the same name and exact file bytes**
-resumes that existing operation; different bytes are refused. There is no automatic
-fresh archive or origin fallback. A committed name cannot be overwritten, even
+remain retained. A **retry of the same name and exact file bytes** resumes that
+existing operation; different bytes are refused. The pinned native Uppy uploader
+already permits up to three retries (four PUT attempts in total); this integration
+does not add retries. There is no automatic fresh archive or origin fallback.
+A committed name cannot be overwritten, even
 when a client requests overwrite. If a response is lost after commit, re-list the
 space: a repeated `PUT` gets 412 rather than creating another stored copy.
 
@@ -116,7 +118,25 @@ command or subsequent listing failure. Private cleanup passed; this is not a
 successful upload/recovery result. The driver now retains, on failure only, a
 closed error category and the last observed PUT/completion/201 counts and HTTP
 status. It exports no request URLs, response bodies, filenames or credentials.
-Success requirements, the real file input, deadlines and cleanup stay unchanged.
+The later [core trial 37204384631](https://github.com/VOLPAROSSA/volparossa/actions/runs/37204384631)
+at core `e57102a26c4a1d0bbda8062459f6f31f6b2b2a9c` and Cloud
+`32836543d950081a2b1505ebde117d8f9db35b82` also remains **failed**: its closed
+observation contains two completed PUTs, one creation and final status 201.
+The fixture then rejected its original single-PUT requirement before checking
+the resulting object or charges. The first response status was not retained,
+so the initial failure and exact retry cause are unknown. Browser/private-profile
+cleanup and final guest cleanup passed; no complete upload/recovery result is claimed.
+
+The candidate corrects that fixture mismatch with the pinned Uppy behavior.
+It requires at most four fully completed PUT attempts, exactly one final 201,
+and only status 0 or non-2xx responses before it. A closed status list accompanies
+the successful upload receipt; incomplete, overflowing, duplicate-success or
+other-successful-response sequences fail. This observation alone does not prove
+one stored object or correct charges: the core parent still independently requires
+one opaque object, exact retained manifest/lease identities, all fourteen physical
+copies and provider charges, restarted downloads, retirement and cleanup. The real
+file input, original service, retry configuration, deadlines and resources are
+unchanged. The original failed runs are not reclassified.
 
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
 shared accounts, concurrent editors, automatic repair/renewal and general writable
