@@ -32,6 +32,35 @@ STAGES = frozenset(('input', 'browser_start', 'locked_ui', 'wrong_token', 'unloc
     'original_download_2', 'logout', 'cleanup'))
 
 
+class UIConditionTimeout(TimeoutError):
+    pass
+
+
+def upload_observation(value):
+    """Closed counters only: never retain XHR URLs, headers or response bodies."""
+    require(type(value) is dict and set(value) == {'puts', 'completed', 'created', 'last_status'})
+    require(all(type(value[key]) is int and 0 <= value[key] <= 65535
+                for key in ('puts', 'completed', 'created')))
+    require(value['created'] <= value['completed'] <= value['puts'])
+    require(type(value['last_status']) is int
+        and (value['last_status'] == 0 or 100 <= value['last_status'] <= 599))
+    return dict(value)
+
+
+def failure_kind(error):
+    if isinstance(error, UIConditionTimeout):
+        return 'condition_timeout'
+    if isinstance(error, TimeoutError):
+        return 'transport_timeout'
+    if isinstance(error, OSError):
+        return 'transport_error'
+    if isinstance(error, RuntimeError):
+        return 'browser_command'
+    if isinstance(error, subprocess.SubprocessError):
+        return 'subprocess_error'
+    return 'boundary_failed'
+
+
 def require(value):
     if not value:
         raise ValueError('Owner upload UI boundary failed')
@@ -108,6 +137,8 @@ def run(mode, root, value):
     base = runpy.run_path(str(SOURCE / 'scripts/smoke_web_ui.py'))
 
     class Marionette(base['Marionette']):
+        last_upload_observation = None
+
         def read(self):
             return read_frame(self.sock)
 
@@ -119,7 +150,17 @@ def run(mode, root, value):
                     return result
                 time.sleep(.2)
             # Do not inherit the synthetic-only driver's page/error dump.
-            raise TimeoutError('Owner upload UI condition timeout')
+            raise UIConditionTimeout('Owner upload UI condition timeout')
+
+        def wait_upload(self, seconds=1800):
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                self.last_upload_observation = upload_observation(
+                    self.script('return window.__vpUpload'))
+                if self.last_upload_observation['created'] == 1:
+                    return
+                time.sleep(.2)
+            raise UIConditionTimeout('Owner upload UI condition timeout')
 
     report = dict(version=1, kind='cloud-owner-upload-original-ui', mode=mode, success=False,
         stage='input', original_files_ui=True, synthetic_backend=False,
@@ -172,7 +213,7 @@ def run(mode, root, value):
                     require(client.script("return !document.getElementById('files-folder-upload-input') && !document.getElementById('new-folder-btn') && !document.getElementById('new-shortcut-btn')"))
                     # Observe only the real native Uppy XHR's bounded completion
                     # facts; this observer does not issue or replace any request.
-                    client.script("window.__vpUpload={puts:0,created:0};const open=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url,...rest){if(method.toUpperCase()==='PUT'){window.__vpUpload.puts++;this.addEventListener('loadend',()=>{if(this.status===201)window.__vpUpload.created++},{once:true})}return open.call(this,method,url,...rest)};")
+                    client.script("window.__vpUpload={puts:0,completed:0,created:0,last_status:0};const open=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url,...rest){if(method.toUpperCase()==='PUT'){window.__vpUpload.puts=Math.min(65535,window.__vpUpload.puts+1);this.addEventListener('loadend',()=>{window.__vpUpload.completed=Math.min(65535,window.__vpUpload.completed+1);window.__vpUpload.last_status=this.status;if(this.status===201)window.__vpUpload.created=Math.min(65535,window.__vpUpload.created+1)},{once:true})}return open.call(this,method,url,...rest)};")
                     with (work / 'uploads' / NAME).open('xb') as output:
                         os.fchmod(output.fileno(), 0o600)
                         output.write(CONTENT)
@@ -183,7 +224,7 @@ def run(mode, root, value):
                         'text': '/state/uploads/' + NAME})
                     report['original_file_input_used'] = True
                     report['stage'] = 'upload_commit'
-                    client.wait("return window.__vpUpload?.created===1", seconds=1800)
+                    client.wait_upload(seconds=1800)
                     require(client.script("return window.__vpUpload.puts===1 && window.__vpUpload.created===1"))
                     report['upload_201_observed'] = True
                     client.wait(listed)
@@ -243,8 +284,10 @@ def run(mode, root, value):
                         os.killpg(browser.pid, signal.SIGKILL)
                         browser.wait(timeout=5)
                     report['browser_stopped_and_joined'] = browser.poll() is not None
-    except (ValueError, TypeError, KeyError, OSError, RuntimeError, subprocess.SubprocessError):
+    except (ValueError, TypeError, KeyError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         report['success'] = False
+        report['failure_kind'] = failure_kind(error)
+        report['upload_observation'] = getattr(client, 'last_upload_observation', None)
     finally:
         report['private_profile_removed'] = work is not None and not work.exists()
         report['success'] = report['success'] and report['browser_stopped_and_joined'] and report['private_profile_removed']

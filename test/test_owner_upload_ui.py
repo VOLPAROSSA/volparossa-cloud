@@ -23,6 +23,18 @@ def settings():
 
 
 class OwnerUploadUIBoundary(unittest.TestCase):
+    def test_upload_observations_are_closed_bounded_and_consistent(self):
+        valid = dict(puts=1, completed=1, created=1, last_status=201)
+        self.assertEqual(UI['upload_observation'](valid), valid)
+        for change in (dict(puts=True), dict(completed=65536), dict(created=2),
+                       dict(last_status=99), dict(last_status='201'),
+                       dict(response='PRIVATE_SENTINEL'), dict(url='private-name')):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                UI['upload_observation'](dict(valid, **change))
+        self.assertEqual(UI['failure_kind'](UI['UIConditionTimeout']('private')),
+                         'condition_timeout')
+        self.assertEqual(UI['failure_kind'](TimeoutError('private')), 'transport_timeout')
+
     def test_exact_independently_derived_fixture_and_loopback_input(self):
         body = bytes(range(256)) * 1024 + b'U'
         self.assertEqual(UI['CONTENT'], body)
@@ -96,10 +108,63 @@ class OwnerUploadUIBoundary(unittest.TestCase):
         self.assertTrue(report['private_profile_removed'])
         self.assertFalse(report['peer_storage_proven'])
         self.assertFalse(report['upload_201_observed'])
+        self.assertEqual(report['failure_kind'], 'browser_command')
+        self.assertIsNone(report['upload_observation'])
         self.assertEqual(report['file_downloads_verified'], 0)
         self.assertNotIn('PRIVATE_SENTINEL', json.dumps(report))
         self.assertNotIn(settings()['bearerToken'], json.dumps(report))
         browser.wait.assert_called_once_with(timeout=15)
+
+    def test_failed_upload_retains_only_last_closed_observation_and_cleanup(self):
+        observation = dict(puts=1, completed=0, created=0, last_status=0)
+
+        class FailedUpload:
+            def __init__(self, _port):
+                self.session = dict(capabilities=dict(browserName='firefox', browserVersion='140.16.0'))
+                self.sock = mock.Mock()
+                self.polls = 0
+
+            def call(self, method, _params=None):
+                if method == 'WebDriver:FindElement':
+                    return {'element-6066-11e4-a52e-4f735466cecf': 'synthetic-input'}
+                return None
+
+            def click(self, _selector):
+                pass
+
+            def script(self, script, _args=None):
+                if script == 'return window.__vpUpload':
+                    self.polls += 1
+                    if self.polls == 1:
+                        return observation
+                    raise TimeoutError('PRIVATE_SENTINEL_NOT_EXPORTED')
+                if script.startswith('return !!document.querySelector'):
+                    return False
+                return True
+
+        browser = mock.Mock()
+        browser.poll.return_value = 1
+        base = dict(Marionette=FailedUpload, firefox_command=BASE['firefox_command'])
+        # Failure-only seam: not an actual upload or browser success claim.
+        with tempfile.TemporaryDirectory() as temporary, \
+             mock.patch.object(UI['socket'], 'gethostname', return_value='volparossa-alpha'), \
+             mock.patch.object(UI['os'], 'geteuid', return_value=os.getuid() or 12345), \
+             mock.patch.dict(UI['run'].__globals__, {'private_directory': lambda _path: None}), \
+             mock.patch.object(UI['runpy'], 'run_path', return_value=base), \
+             mock.patch.object(UI['time'], 'sleep'), \
+             mock.patch.object(UI['subprocess'], 'Popen', return_value=browser):
+            report = UI['run']('upload', Path(temporary), settings())
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+        self.assertFalse(report['success'])
+        self.assertEqual(report['stage'], 'upload_commit')
+        self.assertEqual(report['failure_kind'], 'transport_timeout')
+        self.assertEqual(report['upload_observation'], observation)
+        self.assertTrue(report['original_file_input_used'])
+        self.assertFalse(report['upload_201_observed'])
+        self.assertTrue(report['browser_stopped_and_joined'])
+        self.assertTrue(report['private_profile_removed'])
+        self.assertNotIn('PRIVATE_SENTINEL', json.dumps(report))
+        self.assertNotIn(settings()['bearerToken'], json.dumps(report))
 
     def test_native_file_input_and_download_are_not_replaced_by_fixture_requests(self):
         source = (ROOT / 'scripts/smoke_owner_upload_ui.py').read_text()

@@ -108,6 +108,16 @@ upload or peer-storage result**. Ordinary read-only mode still hides the upload
 button; the explicit owner-upload mode retains the original per-space upload
 permission check, without granting writes to imported spaces.
 
+The original [core trial 37202264396](https://github.com/VOLPAROSSA/volparossa/actions/runs/37202264396)
+at core `d7ca3d88a350e8a0c83852131d07ffbbec79126e` and Cloud
+`3e3d6587012ed46d200218e4447506300f8a4f18` reached `upload_commit` but
+**failed**. The retained report does not distinguish a failed PUT from a browser
+command or subsequent listing failure. Private cleanup passed; this is not a
+successful upload/recovery result. The driver now retains, on failure only, a
+closed error category and the last observed PUT/completion/201 counts and HTTP
+status. It exports no request URLs, response bodies, filenames or credentials.
+Success requirements, the real file input, deadlines and cleanup stay unchanged.
+
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
 shared accounts, concurrent editors, automatic repair/renewal and general writable
 synchronization remain separate work. Existing successful read-only UI/peer trials
