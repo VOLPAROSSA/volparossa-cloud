@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import fs, { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { openOwnerUploads } from '../src/owner-uploads.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
@@ -280,6 +280,16 @@ test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then re
   assert.equal(created.name, name);
   assert.equal(created.id, recoveryResourceId([SPACE, name]));
   assert.equal(created.etag, `"vp-${hash(BODY)}"`);
+  // Original Files awaits Graph getDrive before refreshing its DAV listing.
+  // checkedSDK above verified every packaged module, including this import.
+  const { graph } = await import(pathToFileURL(join(process.env.VOLPAROSSA_CLOUD_WEB_SDK,
+    'package/dist/web-client/graph.js')).href);
+  const refreshed = await graph(f.origin).drives.getDrive(space.id, undefined, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  assert.equal(refreshed.id, space.id);
+  assert.equal(refreshed.driveType, 'project');
+  assert.deepEqual(refreshed.spaceQuota, {}); // Never invent available peer capacity.
   const files = await client.listFiles(space);
   assert.equal(files.children.length, 1);
   assert.equal(files.children[0].name, name);

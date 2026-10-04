@@ -138,6 +138,27 @@ copies and provider charges, restarted downloads, retirement and cleanup. The re
 file input, original service, retry configuration, deadlines and resources are
 unchanged. The original failed runs are not reclassified.
 
+The next [core trial 37206160237](https://github.com/VOLPAROSSA/volparossa/actions/runs/37206160237)
+at core `e1cb044c7086f97c2a25991a22ac2ae2f7aeef22` and Cloud
+`b1a425964d725472e79b6f0f05ce96e5953cadcf` also remains **failed**. It observed
+two completed native PUTs with statuses `[0, 201]` and accepted the upload receipt,
+then timed out waiting for the new file in the live Files listing. The first
+status reports no HTTP response, not a known server error. It did not reach the
+parent's independent object, charge or restart/download checks. Browser/private
+profile cleanup and final guest cleanup passed.
+
+Source tracing found a concrete interoperability gap: original Files awaits
+Graph `getDrive` before refreshing its DAV listing; the pinned SDK uses
+`/graph/v1.0/drives/{id}`, while the adapter previously supported only the
+`v1beta1` route. The actual pinned SDK reproduces that 404 against the real local
+HTTP service. The adapter now accepts **only that authenticated v1.0 drive read**,
+bound to the same exact owner-selected root. It does not add v1.0 accounts,
+collections, permissions or writes. The SDK upload → drive refresh → listing/read
+contract test now passes, with a synthetic storage boundary; no completed native
+UI/peer trial is claimed. The original browser did not retain its Graph response,
+so its exact HTTP failure is not retrospectively asserted. No UI refresh bypass,
+additional retry, deadline or acceptance change is involved.
+
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
 shared accounts, concurrent editors, automatic repair/renewal and general writable
 synchronization remain separate work. Existing successful read-only UI/peer trials

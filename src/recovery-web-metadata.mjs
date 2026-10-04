@@ -85,7 +85,11 @@ export async function recoveryMetadata(target, { origin, backend, resourceId, si
     }
     return { value: [...entries].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map(drive) };
   }
-  const match = /^\/graph\/v1beta1\/drives\/([^/]+)(\/root\/permissions)?$/u.exec(url.pathname);
+  // Original Files awaits the stable Graph getDrive endpoint after upload,
+  // before refreshing its DAV listing. Alias that single read to the same
+  // owner-selected catalog, not other v1.0 accounts, collections or permissions.
+  const match = /^\/graph\/v1beta1\/drives\/([^/]+)(\/root\/permissions)?$/u.exec(url.pathname)
+    ?? /^\/graph\/v1\.0\/drives\/([^/]+)$/u.exec(url.pathname);
   if (match) {
     query(url, match[2] ? { '$top': ['0'], '$count': ['true'], '$filter': ["grantedToV2 ne ''"],
       '$select': ['@libre.graph.permissions.actions.allowedValues'] } : {});
