@@ -46,7 +46,8 @@ export async function recoveryMetadata(target, { origin, backend, resourceId, si
   signal.throwIfAborted();
   if (url.pathname === '/volparossa/recovery/session') {
     query(url);
-    return { version: 1, authority: 'owner-local-catalog', readOnly: true, upstreamAccount: false, owner: OWNER };
+    return { version: 1, authority: 'owner-local-catalog', readOnly: !backend.ownerUploadSpace,
+      ...(backend.ownerUploadSpace ? { ownerUploads: true } : {}), upstreamAccount: false, owner: OWNER };
   }
   if (url.pathname === '/ocs/v1.php/cloud/capabilities') {
     query(url, { format: ['json'] });
@@ -58,11 +59,15 @@ export async function recoveryMetadata(target, { origin, backend, resourceId, si
     // the drive collection. This local read-only authority grants no roles.
     return [];
   }
+  const actions = name => name === backend.ownerUploadSpace ? ['libre.graph/driveItem/upload/create'] : [];
   const drive = entry => ({ id: recoverySpaceId(entry.name), name: entry.name, driveType: 'project',
-    driveAlias: `project/${entry.name}`, description: 'Owner-selected private recovery; read only',
+    driveAlias: `project/${entry.name}`, description: entry.name === backend.ownerUploadSpace
+      ? 'Owner-private new files; no upstream account writes' : 'Owner-selected private recovery; read only',
     // A personal drive would cause the original client to offer upload solely
     // from owner identity. Projects retain its normal permission checks.
     owner: { user: OWNER }, root: { id: resourceId([entry.name]), permissions: [] },
+    // No invented remaining network quota: the core authorizes actual capacity.
+    ...(entry.name === backend.ownerUploadSpace ? { quota: {} } : {}),
     webUrl: `${origin}/dav/spaces/${encodeURIComponent(entry.name)}/`,
   });
   if (url.pathname === '/graph/v1beta1/me/drives') {
@@ -80,7 +85,11 @@ export async function recoveryMetadata(target, { origin, backend, resourceId, si
     }
     return { value: [...entries].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map(drive) };
   }
-  const match = /^\/graph\/v1beta1\/drives\/([^/]+)(\/root\/permissions)?$/u.exec(url.pathname);
+  // Original Files awaits the stable Graph getDrive endpoint after upload,
+  // before refreshing its DAV listing. Alias that single read to the same
+  // owner-selected catalog, not other v1.0 accounts, collections or permissions.
+  const match = /^\/graph\/v1beta1\/drives\/([^/]+)(\/root\/permissions)?$/u.exec(url.pathname)
+    ?? /^\/graph\/v1\.0\/drives\/([^/]+)$/u.exec(url.pathname);
   if (match) {
     query(url, match[2] ? { '$top': ['0'], '$count': ['true'], '$filter': ["grantedToV2 ne ''"],
       '$select': ['@libre.graph.permissions.actions.allowedValues'] } : {});
@@ -94,7 +103,9 @@ export async function recoveryMetadata(target, { origin, backend, resourceId, si
     const entry = await backend.stat(parts, { signal });
     signal.throwIfAborted();
     check(entry?.kind === 'directory', 404);
-    return match[2] ? { value: [], '@libre.graph.permissions.actions.allowedValues': [],
+    // Original Files reads allowedActions here. Do not invent a collaborator,
+    // sharing role, original account permission or upstream owner identity.
+    return match[2] ? { value: [], '@libre.graph.permissions.actions.allowedValues': actions(parts[0]),
       '@libre.graph.permissions.roles.allowedValues': [], '@odata.count': 0 } : drive({ name: parts[0] });
   }
   throw new RecoveryMetadataError(404);

@@ -243,6 +243,40 @@ test('explicit recovery web exposes only public assets before auth and projects 
   ]) } } });
 });
 
+test('native upload Graph v1.0 drive refresh remains an authenticated exact-root read only', async () => {
+  await fixture(async ({ server, calls }) => {
+    const id = recoverySpaceId('space');
+    const path = '/graph/v1.0/drives/' + id;
+    const denied = await request(server, { path, headers: { Authorization: 'Bearer wrong' } });
+    assert.equal(denied.status, 401); assert.equal(denied.body.length, 0);
+    assert.equal(calls.stat, 0); assert.equal(calls.list, 0);
+    const current = await request(server, { path });
+    const historical = await request(server, { path: '/graph/v1beta1/drives/' + id });
+    assert.equal(current.status, 200);
+    assert.deepEqual(JSON.parse(current.body), JSON.parse(historical.body));
+    assert.equal(JSON.parse(current.body).id, id);
+    assert.equal(Object.hasOwn(JSON.parse(current.body), 'quota'), false);
+    for (const method of ['POST', 'PATCH', 'DELETE', 'PUT']) {
+      assert.equal((await request(server, { path, method })).status, 405);
+    }
+    for (const suffix of ['/root/permissions', '/items', '/children']) {
+      assert.equal((await request(server, { path: path + suffix })).status, 404);
+    }
+    for (const target of ['/graph/v1.0/me/drives', '/graph/v1.0/me',
+      '/graph/v1.0/drives/' + recoverySpaceId('foreign'),
+      '/graph/v1.0/drives/' + recoveryResourceId(['space', 'private.txt']),
+      path + '%2Froot', path + '%ZZ']) {
+      assert.ok([400, 404].includes((await request(server, { path: target })).status));
+    }
+    assert.equal((await request(server, { path: path + '?%24select=id' })).status, 400);
+    assert.equal((await request(server, { path, headers: { Origin: 'https://attacker.example' } })).status, 403);
+    assert.equal((await request(server, { path, headers: { Host: 'attacker.example' } })).status, 403);
+    assert.equal(calls.open, 0); // Refreshing metadata never materializes private file bytes.
+  }, { server: { recoveryWeb: { assetsFactory: async () => new Map([
+    ['/', { data: Buffer.from('Public recovery client'), contentType: 'text/plain' }],
+  ]) } } });
+});
+
 test('project storage IDs map only to exact selected roots for listing and downloads', async () => {
   await fixture(async ({ server, calls }) => {
     const root = '/dav/spaces/' + recoverySpaceId('space');

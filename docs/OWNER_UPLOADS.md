@@ -1,0 +1,218 @@
+# Owner-private uploads while the original server is off
+
+This developing slice adds a **separate, explicitly enabled owner upload space**
+to the existing recovery service. It does not turn imported read-only files into
+writable OpenCloud accounts. It accepts new files only: no overwrites, folder
+creation, rename, delete, sharing or synchronization back to the original server.
+
+The original OpenCloud Files **Files Upload** action and Uppy raw DAV `PUT` path
+are reused. A local authenticated upload is privately staged, encrypted with the
+existing GPG helper, then submitted to the shared core's fragment create/deposit
+operations. The core still chooses fragment placement and uniform redundancy;
+Cloud adds neither a copy-count option nor a second storage ledger.
+
+```text
+Original Files Upload / authenticated DAV PUT
+  -> owner-private temporary file -> authenticated encrypted bundle
+  -> core fragment journal -> confirmed redundant deposit
+  -> durable catalog commit -> visible new file
+  -> later GET -> core fragment restore -> verified local decrypt -> download
+```
+
+## Explicit setup
+
+Keep the existing [read-service configuration](OFFLINE_READ.md), selected catalog
+and owner token. Add an upload space whose name does not collide with an imported
+space:
+
+```json
+"ownerUploads": {
+  "directory": "/absolute/private/owner-uploads",
+  "space": "My uploads",
+  "storageConfig": "/absolute/private/upload-storage-template.json"
+}
+```
+
+Create the upload directory mode **0700**, separate from the existing private work
+directory. Keep the storage template mode **0600** in an owner-only directory.
+It uses the existing [core storage configuration](PRIVATE_FILES.md), but **omit
+`stateDirectory`**: each uploaded file receives an opaque owner journal directory.
+Keep `copies` absent. Configure the existing core binary, protected control socket,
+owner identity/passphrase file, fragment size/lifetime/deadline and **3–8 distinct
+provider keys with their explicit grants**. Invalid grants or insufficient core
+capacity remain visible failures, not admission to other peers.
+
+Start with the existing `cloud-serve.mjs --config …` command. `ownerUploads` is
+absent by default and cannot enable cross-origin browser writes. The listener
+remains loopback-only; every private operation needs the configured owner bearer.
+Neither the configuration nor DAV input can supply executable hooks or arbitrary
+local source/destination paths. Original Files requires a **new source build of
+the updated pinned patch**; an older build report is correctly refused.
+
+The new UI label distinguishes owner-private uploads from imported read-only
+files. Uploads use the existing Uppy engine, one file at a time; unsupported
+folder/shortcut creation is hidden in this mode. The upload-enabled service and
+UI use a bounded 30-minute default deadline. The original read-only service keeps
+its two-minute default. Explicit service deadlines may still cancel an upload.
+
+## Publication, retry and recovery
+
+`PUT` returns **201 only after confirmed storage and durable catalog publication**.
+The owner directory holds opaque object names, private recovery bundles, encrypted
+single-file catalogs and core journals. File names and plaintext hashes remain
+inside authenticated encryption, not filenames or public receipts. The new
+file receipt is version 2 with `owner-upload-snapshot` provenance; old version-1
+DAV import receipts keep their original source/version checks. Relabeling an
+upload as a DAV import fails authenticated restoration.
+
+After an incomplete deposit, the file is not listed and its journal/ciphertext
+remain retained. A **retry of the same name and exact file bytes** resumes that
+existing operation; different bytes are refused. The pinned native Uppy uploader
+already permits up to three retries (four PUT attempts in total); this integration
+does not add retries. There is no automatic fresh archive or origin fallback.
+A committed name cannot be overwritten, even
+when a client requests overwrite. If a response is lost after commit, re-list the
+space: a repeated `PUT` gets 412 rather than creating another stored copy.
+
+After service restart, committed catalogs become visible again. Every download
+still restores through the core, verifies the encrypted object and authenticated
+content, then removes temporary plaintext. Reads neither consume a backup nor
+substitute local ciphertext. Retained grants, charges and recovery state must not
+be deleted to make an incomplete operation look finished.
+
+Only one service may mutate an upload workspace at once, enforced by a supervised
+owner lock. The lock supervisor retains the lock through foreground shutdown
+signals until its owner has drained work and closed the control pipe. Forced
+termination is not a successful cleanup acknowledgement. At most 256 upload
+objects are retained, including interrupted stages.
+The existing `maxOpenBytes` bounds each encrypted file and concurrent restored
+ciphertext; small encryption/metadata overhead is included. It is not a disk quota:
+upload staging, ciphertext, restore staging and owner journals use additional local
+space. Forced process termination may leave private staging; this slice does not
+claim secure erasure or automatic abandoned-operation retirement.
+
+## Evidence and remaining scope
+
+The joined [original Files upload and peer-recovery trial 37218270756](https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756)
+**passes**, attempt 1, for Cloud
+`ffdcfaa15cdd2a029dae545904b0a58603da4e17` and core
+`929c2ff909f4e9704046459e0434006397dc9110`:
+
+- Original Files/Uppy uploads a 262,145-byte synthetic file with one PUT and one
+  committed creation (201), then lists it, reloads with reauthentication and
+  relocks on logout. GPG produces 266,429 encrypted bytes, placed by the core as
+  four fragments with two copies each across three providers.
+- The original synthetic DAV source and both local ciphertexts are removed
+  from the recovery path. A new service and browser perform two hash-verified
+  native downloads with provider A stopped; two baseline-file restores also
+  pass. Provider A sends no application response payload during recovery.
+- Retained provider payload charges are unchanged by reads: 714,622, 714,622
+  and 701,906 bytes, including the baseline file. Sixteen fragment copies are
+  explicitly retired; all three stores end with zero leases, committed bytes
+  and reserved bytes. The owner journals keep their identities through restart.
+- All private cleanup checks pass and no owned topology objects remain.
+  Disposable guest-root network state is byte-identical before and after;
+  this is not a separate outer-host verification or independent-device test.
+
+The original 45-file artifact ZIP SHA-256 is
+`0f4da4f71ed7c0ddbf58668c6982f2a0d6e1d510789c21e8293b815c8474e11c`.
+Exact-source report replay and reconstruction from the original phase evidence
+also pass. This proves the bounded owner upload/recovery path, not general
+OpenCloud account service, shared synchronization, automatic storage maintenance
+or server-independent availability for every client.
+
+### Component checks and earlier failed trials
+
+Targeted tests exercise real HTTP, GPG encryption, encrypted catalogs, durable
+publication, restart, repeated verified downloads after local ciphertext removal,
+incomplete-deposit resumption, cancellation and unchanged imported permissions.
+The explicitly staged, hash-verified OpenCloud Web8 SDK also passes actual `PUT`,
+returned file-ID resolution, listing, verified read and overwrite refusal against
+this service. Only the storage-provider boundary is an explicit in-memory
+core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source.
+Those local checks alone are not peer evidence; the joined trial above supplies
+the separately verified live upload/recovery result.
+
+The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
+original Files file input and Uppy upload, then reloads and reauthenticates. Its
+separate download phase opens a fresh browser and verifies two native downloads.
+The core acceptance parent must supply the real service and independently prove
+the source is off, encrypted fragment deposits, service restart, provider
+withdrawal, charges and final retirement. The driver reports only closed UI and
+browser-cleanup observations; its boundary tests are **not an executed native
+upload or peer-storage result**. Ordinary read-only mode still hides the upload
+button; the explicit owner-upload mode retains the original per-space upload
+permission check, without granting writes to imported spaces.
+
+The original [core trial 37202264396](https://github.com/VOLPAROSSA/volparossa/actions/runs/37202264396)
+at core `d7ca3d88a350e8a0c83852131d07ffbbec79126e` and Cloud
+`3e3d6587012ed46d200218e4447506300f8a4f18` reached `upload_commit` but
+**failed**. The retained report does not distinguish a failed PUT from a browser
+command or subsequent listing failure. Private cleanup passed; this is not a
+successful upload/recovery result. The driver now retains, on failure only, a
+closed error category and the last observed PUT/completion/201 counts and HTTP
+status. It exports no request URLs, response bodies, filenames or credentials.
+The later [core trial 37204384631](https://github.com/VOLPAROSSA/volparossa/actions/runs/37204384631)
+at core `e57102a26c4a1d0bbda8062459f6f31f6b2b2a9c` and Cloud
+`32836543d950081a2b1505ebde117d8f9db35b82` also remains **failed**: its closed
+observation contains two completed PUTs, one creation and final status 201.
+The fixture then rejected its original single-PUT requirement before checking
+the resulting object or charges. The first response status was not retained,
+so the initial failure and exact retry cause are unknown. Browser/private-profile
+cleanup and final guest cleanup passed; no complete upload/recovery result is claimed.
+
+The candidate corrects that fixture mismatch with the pinned Uppy behavior.
+It requires at most four fully completed PUT attempts, exactly one final 201,
+and only status 0 or non-2xx responses before it. A closed status list accompanies
+the successful upload receipt; incomplete, overflowing, duplicate-success or
+other-successful-response sequences fail. This observation alone does not prove
+one stored object or correct charges: the core parent still independently requires
+one opaque object, exact retained manifest/lease identities, all fourteen physical
+copies and provider charges, restarted downloads, retirement and cleanup. The real
+file input, original service, retry configuration, deadlines and resources are
+unchanged. The original failed runs are not reclassified.
+
+The next [core trial 37206160237](https://github.com/VOLPAROSSA/volparossa/actions/runs/37206160237)
+at core `e1cb044c7086f97c2a25991a22ac2ae2f7aeef22` and Cloud
+`b1a425964d725472e79b6f0f05ce96e5953cadcf` also remains **failed**. It observed
+two completed native PUTs with statuses `[0, 201]` and accepted the upload receipt,
+then timed out waiting for the new file in the live Files listing. The first
+status reports no HTTP response, not a known server error. It did not reach the
+parent's independent object, charge or restart/download checks. Browser/private
+profile cleanup and final guest cleanup passed.
+
+Source tracing found a concrete interoperability gap: original Files awaits
+Graph `getDrive` before refreshing its DAV listing; the pinned SDK uses
+`/graph/v1.0/drives/{id}`, while the adapter previously supported only the
+`v1beta1` route. The actual pinned SDK reproduces that 404 against the real local
+HTTP service. The adapter now accepts **only that authenticated v1.0 drive read**,
+bound to the same exact owner-selected root. It does not add v1.0 accounts,
+collections, permissions or writes. The SDK upload → drive refresh → listing/read
+contract test now passes, with a synthetic storage boundary; no completed native
+UI/peer trial is claimed. The original browser did not retain its Graph response,
+so its exact HTTP failure is not retrospectively asserted. No UI refresh bypass,
+additional retry, deadline or acceptance change is involved.
+
+The following [core trial 37207919255](https://github.com/VOLPAROSSA/volparossa/actions/runs/37207919255)
+at core `21f5cfc78f3266249fe10544c384371596ef7c13` and Cloud
+`0d483f5c452eef2e9d1bc555a478b2bff57404c2` remains **failed**. The parent retained
+UI stage `cleanup` but no closed UI-failure record. That stage is set only after
+the child's success/browser/profile-cleanup path; its full receipt and the
+parent's precise later rejection were not retained. This does not prove the
+parent's independent object, charge, restart or download checks. Final private
+cleanup passed and the guest-root network snapshots match.
+
+A real process-group regression then reproduced a shutdown defect: the parent
+signals the foreground service's whole group, killing the Python lock supervisor
+before the service can acknowledge its orderly closure. The supervisor now
+retains its lock through SIGTERM/SIGINT/SIGHUP until its owner's pipe closes.
+Real process tests verify lock contention before EOF, release after EOF and normal
+owner shutdown; SIGKILL remains a failed acknowledgement. The original run did
+not export its exact shutdown result, so that cause is not retrospectively
+asserted. This correction does not bypass any cleanup or upload acceptance check;
+the later passing trial is recorded above, without reclassifying this failure.
+
+Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
+shared accounts, concurrent editors, automatic repair/renewal and general writable
+synchronization remain separate work. Neither the read-only trials nor the new
+upload/recovery trial prove full server-independent OpenCloud operation.

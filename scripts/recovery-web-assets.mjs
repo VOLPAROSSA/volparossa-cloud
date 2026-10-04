@@ -12,7 +12,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.ico': 'image/x-icon',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8' };
 
-export async function loadRecoveryWebAssets({ distDirectory, origin }) {
+export async function loadRecoveryWebAssets({ distDirectory, origin, ownerUploads = false }) {
   const url = new URL(origin);
   require(url.origin === origin && url.protocol === 'http:' && url.hostname === '127.0.0.1'
     && isAbsolute(distDirectory) && await realpath(distDirectory) === distDirectory);
@@ -48,13 +48,14 @@ export async function loadRecoveryWebAssets({ distDirectory, origin }) {
   const json = value => ({ data: Buffer.from(JSON.stringify(value)), contentType: 'application/json' });
   assets.set('/config.json', json({ server: origin, theme: origin + '/recovery-theme.json',
     apps: ['files'], external_apps: [], scripts: [], styles: [], customTranslations: [],
-    options: { volparossaOwnerRecovery: true, tokenStorageLocal: false,
-      disabledExtensions: ['com.github.opencloud-eu.web.files.floating-action-button'],
+    options: { volparossaOwnerRecovery: true, ...(ownerUploads ? { volparossaOwnerUploads: true } : {}), tokenStorageLocal: false,
+      disabledExtensions: ownerUploads ? [] : ['com.github.opencloud-eu.web.files.floating-action-button'],
       disableFeedbackLink: true, disableSponsorLink: true, contextHelpers: false,
-      announcement: { bannerText: 'VOLPAROSSA · Private read-only recovery · Selected files only' },
+      announcement: { bannerText: ownerUploads ? 'VOLPAROSSA · Owner-private uploads · Imported files remain read only'
+        : 'VOLPAROSSA · Private read-only recovery · Selected files only' },
       embed: { enabled: false, delegateAuthentication: false } } }));
   assets.set('/recovery-theme.json', json({ common: { name: 'VOLPAROSSA Private Recovery',
-    slogan: 'Selected private files · Read only', logo: '/img/opencloud-icon.png',
+    slogan: ownerUploads ? 'Owner-private files · No original account writes' : 'Selected private files · Read only', logo: '/img/opencloud-icon.png',
     logoMobile: '/img/opencloud-icon.png', shareRoles: {}, urls: {} }, clients: { web: { defaults: {},
     themes: [{ label: 'Light', isDark: false }, { label: 'Dark', isDark: true }] } } }));
   return assets;

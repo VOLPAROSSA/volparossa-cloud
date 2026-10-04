@@ -6,6 +6,13 @@ new OpenCloud account, an OIDC impersonation or a replacement for writable
 OpenCloud synchronization. The normal upstream authentication path stays intact
 when this mode is not selected.
 
+The optional [owner-upload extension](OWNER_UPLOADS.md) adds a separate writable
+space for new private files. Imported selections remain read only. Its updated
+source-built interface now passes a separate joined upload/restarted-download
+trial with real storage peers. The successful read-only trials below remain
+bound to their original sources and patch; the [upload evidence](OWNER_UPLOADS.md#evidence-and-remaining-scope)
+records the newer exact revisions and remaining scope.
+
 The browser receives only the owner's selected catalog. Storage peers still
 receive encrypted fragments, not filenames, private tokens or decryption keys.
 The recovery token remains in browser memory, not a URL or local/session storage.

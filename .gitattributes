@@ -1,0 +1,3 @@
+# Canonical unified diffs retain a space prefix on empty context lines; the
+# builder compares this patch byte-for-byte with git diff --binary HEAD.
+patches/opencloud-web-owner-recovery.patch whitespace=-blank-at-eol

@@ -63,6 +63,15 @@ def json_value(encoded):
 
 
 def source_metadata(value):
+    if isinstance(value, dict) and value.get('kind') == 'owner-upload':
+        require(set(value) == {'kind', 'space', 'name', 'size', 'sha256', 'lastModified'}
+                and all(isinstance(value[key], str) and 0 < len(value[key].encode()) <= 1024
+                    and value[key] not in ('.', '..') and not re.search(r'[\\/\x00-\x1f\x7f]', value[key])
+                    for key in ('space', 'name'))
+                and type(value['size']) is int and 0 <= value['size'] <= MAX_BYTES
+                and isinstance(value['sha256'], str) and re.fullmatch('[0-9a-f]{64}', value['sha256'])
+                and value['lastModified'] is None, 'UPLOAD_METADATA_INVALID')
+        return value
     require(isinstance(value, dict) and set(value) == {'url', 'size', 'etag', 'lastModified'}, 'SOURCE_METADATA_INVALID')
     require(type(value['size']) is int and 0 <= value['size'] <= MAX_BYTES
             and isinstance(value['url'], str) and 0 < len(value['url']) <= 16384
@@ -73,10 +82,11 @@ def source_metadata(value):
 
 
 def receipt(value):
-    require(isinstance(value, dict) and set(value) == RECEIPT_KEYS and value['version'] == 1
+    require(isinstance(value, dict) and set(value) == RECEIPT_KEYS
+            and (value['version'], value['source_consistency']) in (
+                (1, 'strong-etag-conditional-ranges'), (2, 'owner-upload-snapshot'))
             and value['kind'] == 'volparossa-cloud-private-file' and value['cipher_file'] == 'file.pgp'
             and value['encryption'] == 'OpenPGP-AES256'
-            and value['source_consistency'] == 'strong-etag-conditional-ranges'
             and type(value['cipher_bytes']) is int and 1 <= value['cipher_bytes'] <= MAX_BYTES + 1024**2
             and re.fullmatch('[0-9a-f]{64}', value['cipher_sha256']), 'RECEIPT_INVALID')
     return value
@@ -119,6 +129,8 @@ def create(source, metadata, output):
                             reader = CRYPTO.HashedReader(input_file)
                             archive.addfile(member, reader)
                             require(input_file.read(1) == b'', 'SOURCE_SIZE_CHANGED')
+                            if selected.get('kind') == 'owner-upload':
+                                require(reader.hash.hexdigest() == selected['sha256'], 'UPLOAD_SOURCE_CHANGED')
                             manifest = CRYPTO.canonical(dict(version=1, kind='volparossa-cloud-file-content',
                                 source=selected, content_sha256=reader.hash.hexdigest(), content_bytes=info.st_size))
                             require(len(manifest) <= MAX_METADATA, 'METADATA_LIMIT')
@@ -129,9 +141,10 @@ def create(source, metadata, output):
                 encrypted.flush()
                 os.fsync(encrypted.fileno())
         digest, length = hash_file(cipher, MAX_BYTES + 1024**2)
-        result = receipt(dict(version=1, kind='volparossa-cloud-private-file', cipher_file='file.pgp',
+        upload = selected.get('kind') == 'owner-upload'
+        result = receipt(dict(version=2 if upload else 1, kind='volparossa-cloud-private-file', cipher_file='file.pgp',
             cipher_sha256=digest, cipher_bytes=length, encryption='OpenPGP-AES256',
-            source_consistency='strong-etag-conditional-ranges'))
+            source_consistency='owner-upload-snapshot' if upload else 'strong-etag-conditional-ranges'))
         CRYPTO.private_write(staging / 'receipt.json', CRYPTO.canonical(result) + b'\n')
         publish(staging, target)
         return result
@@ -140,7 +153,7 @@ def create(source, metadata, output):
             shutil.rmtree(staging)
 
 
-def unpack(source, staging):
+def unpack(source, staging, owner_upload):
     with tarfile.open(fileobj=source, mode='r|') as archive:
         member = archive.next()
         require(member is not None and member.name == 'content.bin' and member.isreg()
@@ -168,7 +181,11 @@ def unpack(source, staging):
                 and value['version'] == 1 and value['kind'] == 'volparossa-cloud-file-content'
                 and value['content_bytes'] == expected_bytes
                 and value['content_sha256'] == digest.hexdigest(), 'CONTENT_MANIFEST_MISMATCH')
-        require(source_metadata(value['source'])['size'] == expected_bytes, 'CONTENT_SOURCE_MISMATCH')
+        selected = source_metadata(value['source'])
+        require((selected.get('kind') == 'owner-upload') == owner_upload, 'CONTENT_SOURCE_MISMATCH')
+        require(selected['size'] == expected_bytes, 'CONTENT_SOURCE_MISMATCH')
+        if selected.get('kind') == 'owner-upload':
+            require(selected['sha256'] == digest.hexdigest(), 'UPLOAD_SOURCE_CHANGED')
         require(archive.next() is None, 'UNEXPECTED_ARCHIVE_ENTRY')
         CRYPTO.private_write(staging / 'metadata.json', CRYPTO.canonical(value) + b'\n')
     # Consume the GPG stream completely before awaiting its authenticated terminal status.
@@ -199,7 +216,7 @@ def restore(bundle, cipher_path, output):
             with CRYPTO.private_agent(parent) as home:
                 with CRYPTO.crypt_process(home, key, encrypt=False, output=subprocess.PIPE,
                         timeout_seconds=3600, input_stream=cipher) as process:
-                    length = unpack(process.stdout, staging)
+                    length = unpack(process.stdout, staging, expected['version'] == 2)
         # No plaintext output becomes visible at the requested path before GOODMDC,
         # exact ciphertext identity and the encrypted content manifest all agree.
         publish(staging, target)

@@ -38,8 +38,9 @@ authenticated loopback DAV listing/reads and an actual pinned OpenCloud Web SDK
 check. The joined SDK/protected-peer trial now passes with the source and one
 provider offline (core run36916040042). The new source-built original Files UI
 uses an explicit owner-recovery token, read-only capability projection and
-catalog-bound resource IDs, not a fabricated OIDC session. Its UI trial and
-the peer trial remain separate until a joined original-UI proof passes. Owner
+catalog-bound resource IDs, not a fabricated OIDC session. The joined original
+Files UI/peer trial passes (core run36940326270); owner-private upload and
+restarted UI downloads also pass separately (core run37218270756). Owner
 keys, file bundles and core journals are still local dependencies. No OIDC,
 LibreGraph, writable synchronization or sharing service is replaced by this
 read interface. Whole-instance backups are useful for recovery but are not a
@@ -48,6 +49,14 @@ substitute for the live file-access path.
 [Executable private-file recovery and its limits](PRIVATE_FILES.md)
 
 [Encrypted catalog and source-off read service](OFFLINE_READ.md)
+
+The [owner-private upload slice](OWNER_UPLOADS.md) retains that immutable
+selection and adds a separate, explicitly enrolled new-file space. Its existing
+Uppy/DAV PUT path encrypts before core fragment deposit and publishes a durable
+catalog entry only after confirmation. This is not permission to modify the
+original account or an implementation of shared synchronization. The scoped
+native UI/peer trial proves upload, restart and repeated downloads with the
+source and one provider unavailable, not recovery on a second owner device.
 
 ## Backend functions that must not disappear
 

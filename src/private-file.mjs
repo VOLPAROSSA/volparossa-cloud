@@ -66,10 +66,12 @@ async function writePrivate(value, data) {
 function receipt(value) {
   check(value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).length === RECEIPT_KEYS.length && RECEIPT_KEYS.every(key => Object.hasOwn(value, key))
-    && value.version === 1 && value.kind === 'volparossa-cloud-private-file' && value.cipher_file === 'file.pgp'
+    && ((value.version === 1 && value.source_consistency === 'strong-etag-conditional-ranges')
+      || (value.version === 2 && value.source_consistency === 'owner-upload-snapshot'))
+    && value.kind === 'volparossa-cloud-private-file' && value.cipher_file === 'file.pgp'
     && HASH.test(value.cipher_sha256) && Number.isSafeInteger(value.cipher_bytes)
     && value.cipher_bytes > 0 && value.cipher_bytes <= MAX_BYTES + 1024 ** 2
-    && value.encryption === 'OpenPGP-AES256' && value.source_consistency === 'strong-etag-conditional-ranges',
+    && value.encryption === 'OpenPGP-AES256',
   'INVALID_RECEIPT');
   return Object.freeze(value);
 }
@@ -175,6 +177,20 @@ export async function restorePrivateFile({ bundle, cipher, output }, { signal } 
     && result.cipher_sha256 === expected.cipher_sha256 && result.openpgp_integrity_verified === true
     && result.manifest_verified === true, 'CRYPTO_REPORT_INVALID');
   return Object.freeze(result);
+}
+
+/** A newly received owner file, not a fabricated DAV import or upstream permission. */
+export async function sealOwnerUpload({ source, space, name, size, sha256, output }, { signal } = {}) {
+  await fresh(output);
+  const stage = await mkdtemp(join(dirname(output), 'upload-metadata-'));
+  try {
+    const metadata = join(stage, 'metadata.json');
+    await writePrivate(metadata, JSON.stringify({ kind: 'owner-upload', space, name, size, sha256, lastModified: null }));
+    const result = receipt(await helper(['encrypt', '--source', source, '--metadata', metadata, '--output', output], signal));
+    check(result.version === 2, 'INVALID_UPLOAD_RECEIPT');
+    await verifiedCipher(join(output, 'file.pgp'), result);
+    return result;
+  } finally { await rm(stage, { recursive: true }); }
 }
 
 export async function storePrivateFile(operation, { config, bundle }, {

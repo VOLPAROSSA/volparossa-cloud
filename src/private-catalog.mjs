@@ -83,9 +83,11 @@ async function fileReceipt(bundle) {
   await directory(bundle);
   const value = await readPrivateJSON(join(bundle, 'receipt.json'), 4096);
   check(object(value, ['version', 'kind', 'cipher_file', 'cipher_sha256', 'cipher_bytes', 'encryption', 'source_consistency'])
-    && value.version === 1 && value.kind === 'volparossa-cloud-private-file' && value.cipher_file === 'file.pgp'
+    && ((value.version === 1 && value.source_consistency === 'strong-etag-conditional-ranges')
+      || (value.version === 2 && value.source_consistency === 'owner-upload-snapshot'))
+    && value.kind === 'volparossa-cloud-private-file' && value.cipher_file === 'file.pgp'
     && HASH.test(value.cipher_sha256) && integer(value.cipher_bytes, 1, MAX_CIPHER)
-    && value.encryption === 'OpenPGP-AES256' && value.source_consistency === 'strong-etag-conditional-ranges',
+    && value.encryption === 'OpenPGP-AES256',
   'INVALID_FILE_RECEIPT');
   return value;
 }
@@ -180,12 +182,20 @@ async function materialize(selection, workDirectory, expected, { signal, storage
       && metadata.version === 1 && metadata.kind === 'volparossa-cloud-file-content'
       && metadata.content_bytes === result.bytes && HASH.test(metadata.content_sha256), 'INVALID_SOURCE_METADATA');
     const source = metadata.source;
-    check(object(source, ['url', 'etag', 'size', 'lastModified']) && source.size === result.bytes,
-      'INVALID_SOURCE_METADATA');
-    const sourceURL = new URL(source.url);
-    check(!sourceURL.username && !sourceURL.password && !sourceURL.search && !sourceURL.hash
-      && sourceURL.pathname.startsWith('/dav/spaces/'), 'INVALID_SOURCE_METADATA');
-    const sourceSegments = sourceURL.pathname.slice('/dav/spaces/'.length).split('/').map(decodeURIComponent);
+    let sourceSegments;
+    if (receipt.version === 2) {
+      check(object(source, ['kind', 'space', 'name', 'size', 'sha256', 'lastModified'])
+        && source.kind === 'owner-upload' && source.size === result.bytes
+        && source.sha256 === metadata.content_sha256 && source.lastModified === null, 'INVALID_SOURCE_METADATA');
+      sourceSegments = [source.space, source.name];
+    } else {
+      check(object(source, ['url', 'etag', 'size', 'lastModified']) && source.size === result.bytes,
+        'INVALID_SOURCE_METADATA');
+      const sourceURL = new URL(source.url);
+      check(!sourceURL.username && !sourceURL.password && !sourceURL.search && !sourceURL.hash
+        && sourceURL.pathname.startsWith('/dav/spaces/'), 'INVALID_SOURCE_METADATA');
+      sourceSegments = sourceURL.pathname.slice('/dav/spaces/'.length).split('/').map(decodeURIComponent);
+    }
     check(pathKey(segments(sourceSegments, true)) === pathKey(selection.segments), 'SOURCE_SELECTION_MISMATCH');
     const entry = { ...selection, size: result.bytes, sha256: metadata.content_sha256,
       cipherSha256: receipt.cipher_sha256, cipherBytes: receipt.cipher_bytes, lastModified: modified(source.lastModified) };
@@ -246,6 +256,14 @@ function validateIndex(value) {
       && (entry.lastModified === null || modified(entry.lastModified) === entry.lastModified), 'INVALID_CATALOG');
     return Object.freeze({ ...entry, segments: segments(entry.segments, true) });
   });
+}
+
+/** Trusted owner-upload code supplies entries; this grants no source-account rights. */
+export async function sealPrivateCatalogEntries(entries, output, { signal } = {}) {
+  const value = { version: 1, kind: 'volparossa-cloud-private-catalog-index', entries };
+  validateIndex(value);
+  await fresh(output);
+  return crypto('seal', ['--output', output], Buffer.from(JSON.stringify(value)), signal);
 }
 function indexTree(entries) {
   const nodes = new Map([[pathKey([]), { kind: 'directory', children: new Map() }]]);
@@ -308,6 +326,11 @@ export async function openPrivateCatalog({ catalog, workDirectory, maxOpenBytes 
       return key === undefined ? null : Object.freeze(JSON.parse(key));
     },
     async stat(parts, { signal } = {}) { return lookup(parts, signal)?.stat ?? null; },
+    async materializationBytes(parts, { signal } = {}) {
+      const node = lookup(parts, signal);
+      check(node?.kind === 'file', 'NOT_A_FILE');
+      return node.entry.cipherBytes;
+    },
     async list(parts, { signal } = {}) {
       const node = lookup(parts, signal);
       check(node?.kind === 'directory', node ? 'NOT_A_DIRECTORY' : 'NOT_FOUND');

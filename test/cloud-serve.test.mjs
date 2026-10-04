@@ -40,6 +40,40 @@ test('original web UI is explicitly selected and cannot add cross-origin access'
   }
 });
 
+test('separate owner upload enrollment is explicit and cannot grant cross-origin or upstream writes', () => {
+  const ownerUploads = { directory: '/private/uploads', space: 'My uploads', storageConfig: '/private/core-template.json' };
+  assert.equal(Object.hasOwn(validateConfiguration(CONFIG), 'ownerUploads'), false);
+  const configured = validateConfiguration({ ...CONFIG, ownerUploads });
+  assert.deepEqual(configured.ownerUploads, ownerUploads);
+  assert.equal(configured.requestTimeoutMs, 1800000);
+  for (const changed of [{ ...ownerUploads, overwrite: true }, { ...ownerUploads, space: '../Imported' },
+    { ...ownerUploads, directory: 'relative' }, { ...ownerUploads, copies: 1 }]) {
+    assert.throws(() => validateConfiguration({ ...CONFIG, ownerUploads: changed }));
+  }
+  assert.throws(() => validateConfiguration({ ...CONFIG, ownerUploads, allowedOrigins: ['https://ui.example.test'] }));
+});
+
+test('owner upload backend wraps but does not replace the original catalog authority', async () => {
+  const ownerUploads = { directory: '/private/uploads', space: 'My uploads', storageConfig: '/private/core-template.json' };
+  const base = { async close() {} }, wrapped = { async close() {} };
+  const service = await startCloudService({ ...CONFIG, ownerUploads }, {
+    openCatalog: async () => base,
+    openUploads: async (options, context) => {
+      assert.equal(context.base, base);
+      assert.equal(options.storageConfig, ownerUploads.storageConfig);
+      assert.equal(Object.hasOwn(options, 'bearerToken'), false);
+      return wrapped;
+    },
+    startServer: async options => {
+      assert.equal(options.backend, wrapped);
+      assert.equal(options.requestTimeoutMs, 1800000);
+      return { origin: 'http://127.0.0.1:12345', async close() {} };
+    },
+  });
+  assert.equal(service.readOnly, false);
+  await service.close();
+});
+
 test('explicit web selection reaches only the reviewed asset loader factory', async () => {
   const service = await startCloudService({ ...CONFIG, webDist: '/private/web-dist' }, {
     openCatalog: async () => ({ close: async () => {} }),
