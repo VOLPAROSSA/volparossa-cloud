@@ -4,8 +4,17 @@
 import fcntl
 import os
 from pathlib import Path
+import signal
 import stat
 import sys
+
+# Foreground shutdown signals also reach this supervised process. Keep the
+# exclusive lock until the owner has drained work and closed its stdin pipe;
+# releasing on the signal could admit a second writer during shutdown. Parent
+# death also closes the pipe. The existing owner's bounded SIGKILL escalation
+# still fails cleanup rather than fabricating a normal acknowledgement.
+for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    signal.signal(signum, signal.SIG_IGN)
 
 try:
     root = Path(sys.argv[1])

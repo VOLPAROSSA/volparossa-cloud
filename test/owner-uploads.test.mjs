@@ -2,7 +2,9 @@
 // Real HTTP, GPG, encrypted catalogs and restart. ONLY the core storage boundary
 // is a synthetic contract fixture: this is not native Uppy or overlay peer proof.
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import fs, { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
@@ -263,6 +265,45 @@ test('cancellation joins pending core request, retains its journal, removes stag
     assert.equal((await lstat(join(f.directory, id, 'journal'))).isDirectory(), true);
     await assert.rejects(lstat(join(f.directory, id, 'READY.json')), { code: 'ENOENT' });
     await f.stop();
+  });
+
+test('foreground owner and supervised lock join cleanly after real process-group shutdown',
+  { timeout: 15000 }, async t => {
+    const f = await fixture(t);
+    // Real owner backend and Python flock supervisor. The empty base catalog
+    // is synthetic; no storage exchange or browser outcome is claimed here.
+    const source = `
+      import { openOwnerUploads } from ${JSON.stringify(new URL('../src/owner-uploads.mjs', import.meta.url).href)};
+      const backend = await openOwnerUploads(JSON.parse(process.argv[1]), {
+        base: { async stat() { return null; }, async close() {} }
+      });
+      process.once('SIGTERM', async () => {
+        try { await backend.close(); process.stdout.write('CLOSED\\n'); }
+        catch { process.stderr.write('CLEANUP_FAILED\\n'); process.exitCode = 1; }
+      });
+      process.stdout.write('READY\\n');
+    `;
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', source, JSON.stringify(f.config)],
+      { detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const ended = once(child, 'close');
+    let output = '', errors = '';
+    child.stdout.on('data', part => { output += part; });
+    child.stderr.on('data', part => { errors += part; });
+    try {
+      const [ready] = await once(child.stdout, 'data', { signal: AbortSignal.timeout(5000) });
+      assert.equal(ready.toString(), 'READY\n');
+      const shutdown = once(child, 'close', { signal: AbortSignal.timeout(5000) });
+      process.kill(-child.pid, 'SIGTERM');
+      assert.deepEqual(await shutdown, [0, null]);
+      assert.equal(output, 'READY\nCLOSED\n');
+      assert.equal(errors, '');
+      // The acknowledged shutdown must have released its actual workspace lock.
+      await f.start();
+      await f.stop();
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGKILL');
+      await ended;
+    }
   });
 
 test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then reads through encrypted storage CONTRACT', {

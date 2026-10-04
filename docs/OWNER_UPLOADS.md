@@ -81,7 +81,10 @@ substitute local ciphertext. Retained grants, charges and recovery state must no
 be deleted to make an incomplete operation look finished.
 
 Only one service may mutate an upload workspace at once, enforced by a supervised
-owner lock. At most 256 upload objects are retained, including interrupted stages.
+owner lock. The lock supervisor retains the lock through foreground shutdown
+signals until its owner has drained work and closed the control pipe. Forced
+termination is not a successful cleanup acknowledgement. At most 256 upload
+objects are retained, including interrupted stages.
 The existing `maxOpenBytes` bounds each encrypted file and concurrent restored
 ciphertext; small encryption/metadata overhead is included. It is not a disk quota:
 upload staging, ciphertext, restore staging and owner journals use additional local
@@ -158,6 +161,25 @@ contract test now passes, with a synthetic storage boundary; no completed native
 UI/peer trial is claimed. The original browser did not retain its Graph response,
 so its exact HTTP failure is not retrospectively asserted. No UI refresh bypass,
 additional retry, deadline or acceptance change is involved.
+
+The following [core trial 37207919255](https://github.com/VOLPAROSSA/volparossa/actions/runs/37207919255)
+at core `21f5cfc78f3266249fe10544c384371596ef7c13` and Cloud
+`0d483f5c452eef2e9d1bc555a478b2bff57404c2` remains **failed**. The parent retained
+UI stage `cleanup` but no closed UI-failure record. That stage is set only after
+the child's success/browser/profile-cleanup path; its full receipt and the
+parent's precise later rejection were not retained. This does not prove the
+parent's independent object, charge, restart or download checks. Final private
+cleanup passed and the guest-root network snapshots match.
+
+A real process-group regression then reproduced a shutdown defect: the parent
+signals the foreground service's whole group, killing the Python lock supervisor
+before the service can acknowledge its orderly closure. The supervisor now
+retains its lock through SIGTERM/SIGINT/SIGHUP until its owner's pipe closes.
+Real process tests verify lock contention before EOF, release after EOF and normal
+owner shutdown; SIGKILL remains a failed acknowledgement. The original run did
+not export its exact shutdown result, so that cause is not retrospectively
+asserted. This correction does not bypass any cleanup or upload acceptance check,
+and is not yet a completed native UI/peer result.
 
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
 shared accounts, concurrent editors, automatic repair/renewal and general writable
