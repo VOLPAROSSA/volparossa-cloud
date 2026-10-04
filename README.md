@@ -8,25 +8,19 @@ An OpenCloud integration for Project VOLPAROSSA's **DICN — Decentralized
 Intelligent Cooperative Network**. The goal is to keep your files useful and
 reachable without requiring your own OpenCloud server to stay switched on.
 
-**Development status:** integration in progress, not a working replacement for
-an always-on OpenCloud server. Authorized file import, encryption and repeated
-restoration now pass a real protected-peer trial with the original synthetic
-DAV source stopped and one storage provider offline. A new encrypted catalog
-and authenticated, read-only DAV service make selected files browsable through
-the OpenCloud Web SDK. That SDK-to-peer read path now also passes its own live
-trial: listing, full/range reads, authentication checks and private cleanup with
-the source and one provider offline. A source-built **OpenCloud Files interface**
-now has an explicit owner-local, read-only recovery mode. Its joined browser/peer
-trial also passes: original Files navigation and two verified downloads with the
-source and one provider offline. This is not a replacement account service,
-writable synchronization or second-device recovery.
+**Development status:** private file import, browsing, new-file upload and
+recovery now pass scoped trials through the **original OpenCloud Files interface
+and real VOLPAROSSA storage peers**. In the latest trial, the interface uploads
+and encrypts a file, the core stores its fragments, and a restarted service and
+browser download it twice after the original source and one storage peer are
+stopped and local ciphertexts are removed. Reads preserve the stored copies;
+explicit retirement brings all provider charges back to zero.
 
-The next executable slice adds an explicitly enabled **owner-private upload
-space** beside the unchanged read-only imports. The connector now supports new
-file upload, encryption, core fragment deposit, durable catalog publication and
-restart/download; its targeted tests use real HTTP/GPG with an explicit storage
-fixture. The updated original Files/Uppy connection still needs a new native
-build and joined live-peer upload proof. [Upload setup and limits →](docs/OWNER_UPLOADS.md)
+This is an owner-local integration in development, **not a complete replacement
+for an always-on OpenCloud server**. Imported selections stay read only; an
+explicitly enabled owner-private upload space accepts new files. Accounts,
+sharing, writable synchronization and recovery on another device remain open.
+[Upload setup, original trial and limits →](docs/OWNER_UPLOADS.md)
 
 ## One core, private files
 
@@ -68,9 +62,10 @@ Storing fragments is only one part of keeping OpenCloud usable while its origina
 server is off. Accounts, directory metadata, permissions, sharing and client
 synchronization must remain available too.
 
-The first demonstrated application milestone is **private, source-off file browsing**:
-import explicitly selected files and their catalog, then recover and read them
-through the original Files interface after the synthetic source is stopped.
+The demonstrated application milestones are **private, source-off file browsing
+and owner-private uploads**: import selected files or upload new ones to a
+separate private space, then recover and read them through the original Files
+interface after the synthetic source is stopped.
 This uses an owner-local recovery adapter, not ordinary OpenCloud account login;
 it does not prove complete compatibility with unmodified web, desktop or mobile clients.
 
@@ -169,8 +164,18 @@ removed and provider A offline, six protected reconstructions from B/C serve the
 direct restore, catalog, SDK reads and two independently verified original UI
 downloads. Authentication denial, logout, non-consuming reads, all-copy retirement
 and unchanged host state pass. The earlier failed UI trials remain recorded in
-[the recovery-interface evidence](docs/RECOVERY_WEB.md); accounts, writes, sharing,
-cross-device recovery and synchronization remain open.
+[the recovery-interface evidence](docs/RECOVERY_WEB.md). That read-only milestone
+did not prove uploads.
+
+The latest [original upload and restarted-recovery trial](https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756)
+passes for Cloud `ffdcfaa15cdd2a029dae545904b0a58603da4e17` and core
+`929c2ff909f4e9704046459e0434006397dc9110`. Original Files/Uppy uploads one new
+file; the core retains two copies of each of its four encrypted fragments.
+After restart, source shutdown, local-ciphertext removal and provider A's loss,
+two original UI downloads match the source bytes. Retained charges, all-copy
+retirement, private cleanup and unchanged disposable guest networking pass.
+See [the scoped evidence](docs/OWNER_UPLOADS.md#evidence-and-remaining-scope);
+full accounts, sharing, synchronization and cross-device recovery remain open.
 
 ## Upstream and licensing
 

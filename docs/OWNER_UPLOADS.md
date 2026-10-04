@@ -93,14 +93,45 @@ claim secure erasure or automatic abandoned-operation retirement.
 
 ## Evidence and remaining scope
 
+The joined [original Files upload and peer-recovery trial 37218270756](https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756)
+**passes**, attempt 1, for Cloud
+`ffdcfaa15cdd2a029dae545904b0a58603da4e17` and core
+`929c2ff909f4e9704046459e0434006397dc9110`:
+
+- Original Files/Uppy uploads a 262,145-byte synthetic file with one PUT and one
+  committed creation (201), then lists it, reloads with reauthentication and
+  relocks on logout. GPG produces 266,429 encrypted bytes, placed by the core as
+  four fragments with two copies each across three providers.
+- The original synthetic DAV source and both local ciphertexts are removed
+  from the recovery path. A new service and browser perform two hash-verified
+  native downloads with provider A stopped; two baseline-file restores also
+  pass. Provider A sends no application response payload during recovery.
+- Retained provider payload charges are unchanged by reads: 714,622, 714,622
+  and 701,906 bytes, including the baseline file. Sixteen fragment copies are
+  explicitly retired; all three stores end with zero leases, committed bytes
+  and reserved bytes. The owner journals keep their identities through restart.
+- All private cleanup checks pass and no owned topology objects remain.
+  Disposable guest-root network state is byte-identical before and after;
+  this is not a separate outer-host verification or independent-device test.
+
+The original 45-file artifact ZIP SHA-256 is
+`0f4da4f71ed7c0ddbf58668c6982f2a0d6e1d510789c21e8293b815c8474e11c`.
+Exact-source report replay and reconstruction from the original phase evidence
+also pass. This proves the bounded owner upload/recovery path, not general
+OpenCloud account service, shared synchronization, automatic storage maintenance
+or server-independent availability for every client.
+
+### Component checks and earlier failed trials
+
 Targeted tests exercise real HTTP, GPG encryption, encrypted catalogs, durable
 publication, restart, repeated verified downloads after local ciphertext removal,
 incomplete-deposit resumption, cancellation and unchanged imported permissions.
 The explicitly staged, hash-verified OpenCloud Web8 SDK also passes actual `PUT`,
 returned file-ID resolution, listing, verified read and overwrite refusal against
 this service. Only the storage-provider boundary is an explicit in-memory
-core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source. **A newly built native
-Files upload joined to real protected peers has not yet been demonstrated.**
+core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source.
+Those local checks alone are not peer evidence; the joined trial above supplies
+the separately verified live upload/recovery result.
 
 The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
 original Files file input and Uppy upload, then reloads and reauthenticates. Its
@@ -178,10 +209,10 @@ retains its lock through SIGTERM/SIGINT/SIGHUP until its owner's pipe closes.
 Real process tests verify lock contention before EOF, release after EOF and normal
 owner shutdown; SIGKILL remains a failed acknowledgement. The original run did
 not export its exact shutdown result, so that cause is not retrospectively
-asserted. This correction does not bypass any cleanup or upload acceptance check,
-and is not yet a completed native UI/peer result.
+asserted. This correction does not bypass any cleanup or upload acceptance check;
+the later passing trial is recorded above, without reclassifying this failure.
 
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
 shared accounts, concurrent editors, automatic repair/renewal and general writable
-synchronization remain separate work. Existing successful read-only UI/peer trials
-do not prove this new upload path or full server-independent OpenCloud operation.
+synchronization remain separate work. Neither the read-only trials nor the new
+upload/recovery trial prove full server-independent OpenCloud operation.
