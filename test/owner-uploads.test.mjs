@@ -387,11 +387,11 @@ test('foreground owner and supervised lock join cleanly after real process-group
     }
   });
 
-test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then reads through encrypted storage CONTRACT', {
+for (const withMaintenance of [false, true]) test(`actual pinned OpenCloud SDK uploads and resolves returned file ID, then reads through encrypted storage CONTRACT${withMaintenance ? ' with finite automatic enrollment' : ''}`, {
   skip: !process.env.VOLPAROSSA_CLOUD_WEB_SDK && 'explicit pinned SDK staging required; no downloads', timeout: 90000,
 }, async t => {
   const { webdav } = await checkedSDK(process.env.VOLPAROSSA_CLOUD_WEB_SDK);
-  const f = await fixture(t);
+  const f = await fixture(t, { withMaintenance });
   await f.start();
   const client = webdav(f.origin, () => ({ Authorization: `Bearer ${TOKEN}` }));
   const space = { id: recoverySpaceId(SPACE), webDavPath: `spaces/${recoverySpaceId(SPACE)}`, driveType: 'project' };
@@ -402,6 +402,11 @@ test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then re
   assert.equal(created.name, name);
   assert.equal(created.id, recoveryResourceId([SPACE, name]));
   assert.equal(created.etag, `"vp-${hash(BODY)}"`);
+  if (withMaintenance) {
+    assert.deepEqual(f.calls.map(([op]) => op), ['create', 'deposit', 'enroll', 'start']);
+    assert.equal(f.calls[2][2].authorizationExpiresAt, f.policy.expiresAt);
+    assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
+  }
   // Original Files awaits Graph getDrive before refreshing its DAV listing.
   // checkedSDK above verified every packaged module, including this import.
   const { graph } = await import(pathToFileURL(join(process.env.VOLPAROSSA_CLOUD_WEB_SDK,
@@ -419,5 +424,6 @@ test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then re
   assert.deepEqual(Buffer.from(read.body), BODY);
   await assert.rejects(client.putFileContents(space, { path: name, content: 'replacement', overwrite: true }),
     error => error.statusCode === 412);
-  assert.deepEqual(f.calls.map(([op]) => op), ['create', 'deposit', 'restore']);
+  assert.deepEqual(f.calls.map(([op]) => op), withMaintenance
+    ? ['create', 'deposit', 'enroll', 'start', 'restore'] : ['create', 'deposit', 'restore']);
 });

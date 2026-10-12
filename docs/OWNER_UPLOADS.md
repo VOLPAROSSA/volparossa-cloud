@@ -187,13 +187,19 @@ core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source
 Those local checks alone are not peer evidence; the joined trial above supplies
 the separately verified live upload/recovery result.
 
-The new version-2 maintenance policy has a separate focused check: **50 tests pass
-and one explicitly unstaged OpenCloud SDK test skips** across the upload,
-maintenance, service and private-file suites. These include actual loopback HTTP
-and GPG, enrollment-before-publication, retained reservations, restart, expiry,
-tampering and cancellation. Their core boundary is synthetic. The earlier live
-upload trial did not run this new policy; a joined real-core upload → automatic
-enrollment → repair → restarted read → verified retirement trial remains required.
+The new version-2 maintenance policy passes **50 component checks** across the
+upload, maintenance, service and private-file suites. These include actual
+loopback HTTP and GPG, enrollment-before-publication, retained reservations,
+restart, expiry, tampering and cancellation. Both real pinned SDK variants also
+pass: ordinary uploads and uploads with finite automatic enrollment. The latter
+checks enrollment, the original deadline and reserved ceiling when PUT returns,
+then refreshes the drive, lists the file, verifies its decrypted body and refuses
+overwrite. These SDK checks require explicitly staged, verified source bytes;
+ordinary runs without that staging skip them.
+
+Their core boundary is synthetic. The earlier live upload trial did not run this
+new policy; a joined real-core upload → automatic enrollment → repair → restarted
+read → verified retirement trial remains required.
 
 The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
 original Files file input and Uppy upload, then reloads and reauthenticates. Its
