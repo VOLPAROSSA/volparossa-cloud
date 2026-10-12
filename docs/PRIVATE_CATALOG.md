@@ -116,8 +116,11 @@ The service opens one adapter for each explicitly listed archive. Catalog reads
 and uploads referencing that configuration use the **same instance**. Before
 foreground storage work, the shared adapter stops and joins its maintenance child;
 only then does it acquire the archive lock. Successful non-delete operations can
-resume the same still-valid enrollment. Cloud adds no repair scheduler, capacity
-ledger, grant creation or automatic enrollment when a file is read or uploaded.
+resume the same still-valid enrollment. This list form creates no grants or new
+enrollments. The separate [version-2 upload policy](OWNER_UPLOADS.md#automatic-maintenance-under-finite-authority)
+can enroll new owner uploads within an explicit shared ceiling and absolute
+deadline. Neither form adds a peer-repair scheduler or a physical-storage ledger;
+reading a file never enrolls it automatically.
 
 Service shutdown closes every owned adapter, even if another close fails.
 Unconfirmed cleanup remains a visible failure. `maintenanceStatus()` on the
@@ -127,8 +130,9 @@ Without `storageMaintenance`, ordinary service behavior is unchanged.
 
 These bindings have adapter/contract lifecycle tests, not yet a combined
 protected-peer Cloud maintenance proof. The service supervises processes while
-it is running; it does not install an always-on owner service. Automatic enrollment
-of new uploads, grant refresh, second-device authority recovery and reciprocal
+it is running; it does not install an always-on owner service. The version-2
+upload policy also has contract tests, not a completed protected-peer upload and
+maintenance trial. Grant refresh, second-device authority recovery and reciprocal
 capacity management remain unfinished.
 
 ## Evidence and remaining work

@@ -2,6 +2,7 @@
 // Service-owned handles to existing core enrollments, not an app-side repair scheduler.
 import { isAbsolute, normalize, sep } from 'node:path';
 import { CoreStorage } from '../vendor/volparossa-image/core-storage.mjs';
+import { openUploadMaintenance, validateUploadMaintenance } from './storage-upload-maintenance.mjs';
 
 export class StorageMaintenanceError extends Error {
   constructor(code) { super(code); this.name = 'StorageMaintenanceError'; this.code = code; }
@@ -15,6 +16,7 @@ function canonical(value) {
   return value;
 }
 export function validateStorageMaintenance(value) {
+  if (value?.version === 2) return validateUploadMaintenance(value);
   check(Array.isArray(value) && value.length > 0 && value.length <= 8);
   const entries = value.map(entry => {
     check(entry && typeof entry === 'object' && !Array.isArray(entry)
@@ -30,6 +32,7 @@ export function validateStorageMaintenance(value) {
 export async function openStorageMaintenance(value, {
   signal, storageFactory = path => CoreStorage.open(path),
 } = {}) {
+  if (value?.version === 2) return openUploadMaintenance(value, { signal, storageFactory });
   const entries = validateStorageMaintenance(value);
   const owned = new Map();
   let closed = false, closing;

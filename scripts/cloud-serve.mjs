@@ -110,7 +110,10 @@ export async function startCloudService(value, {
     backend = await openCatalog({ catalog: config.catalog, workDirectory: config.workDirectory,
       maxOpenBytes: config.maxOpenBytes, maxOpenFiles: config.maxConcurrent }, { signal: cancel.signal, ...storageContext });
     if (config.ownerUploads) backend = await openUploads({ ...config.ownerUploads, workDirectory: config.workDirectory,
-      maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal, ...storageContext });
+      maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal, ...storageContext,
+      ...(maintenance?.version === 2 ? { maintenance } : {}) });
+    // Discover retained pending reservations before starting any v2 owner loop.
+    if (maintenance?.version === 2) await maintenance.activate();
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     server = await startServer({ backend, bearerToken: config.bearerToken, port: config.port,
       allowedOrigins: config.allowedOrigins, maxConcurrent: config.maxConcurrent,
