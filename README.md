@@ -129,6 +129,11 @@ reuses the same adapter and joins maintenance before taking the archive lock.
 These bindings have lifecycle/contract checks; their combined protected-peer
 maintenance proof and automatic grant refresh remain unfinished.
 
+A new owner-upload workspace can start with an explicitly created, encrypted
+empty catalog; importing an existing file first is no longer required. Missing
+or damaged catalogs still fail authentication rather than starting an empty
+replacement service.
+
 [Run the private read service and see its evidence boundaries →](docs/OFFLINE_READ.md)
 
 [Build and open the original Files recovery interface →](docs/RECOVERY_WEB.md)

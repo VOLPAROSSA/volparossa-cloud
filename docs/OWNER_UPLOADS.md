@@ -21,9 +21,31 @@ Original Files Upload / authenticated DAV PUT
 
 ## Explicit setup
 
-Keep the existing [read-service configuration](OFFLINE_READ.md), selected catalog
-and owner token. Add an upload space whose name does not collide with an imported
-space:
+Use the [read-service configuration](OFFLINE_READ.md), an encrypted catalog and
+an owner token. An existing imported catalog remains usable. For a new upload-only
+workspace, no previous import is required: save the following explicit selection
+as a mode-0600 file inside an owner-only directory:
+
+```json
+{"version": 1, "files": []}
+```
+
+Create a fresh catalog with the existing CLI, using your actual private paths:
+
+```sh
+node scripts/cloud-catalog.mjs create \
+  --selection /owner/private/empty-selection.json \
+  --catalog /owner/private/catalog \
+  --work-directory /owner/private/work
+```
+
+The parent and work directories must already be mode 0700; the catalog target
+must not exist. This produces the same authenticated encrypted catalog, private
+recovery key and receipt as a nonempty selection, with zero imported files. Set
+the service's `catalog` to that path. A missing or corrupted catalog is still an
+error, never an instruction to create a replacement or discard previous data.
+
+Add an upload space whose name does not collide with an imported space:
 
 ```json
 "ownerUploads": {
@@ -200,6 +222,12 @@ ordinary runs without that staging skip them.
 Their core boundary is synthetic. The earlier live upload trial did not run this
 new policy; a joined real-core upload → automatic enrollment → repair → restarted
 read → verified retirement trial remains required.
+
+Three further checks pass for empty-catalog startup: actual CLI creation and
+inspection with GPG, unchanged selection bounds and refusal of missing/tampered
+catalogs, and the real Cloud service's first authenticated HTTP upload followed by
+a cold restart/read after removing local ciphertext. The latter preserves the
+original enrollment and uses the same explicitly synthetic core boundary.
 
 The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
 original Files file input and Uppy upload, then reloads and reauthenticates. Its
