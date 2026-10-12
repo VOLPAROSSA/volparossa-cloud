@@ -121,6 +121,12 @@ from an OpenCloud account; it grants no upstream identity, write or sharing righ
 The catalog and per-file recovery keys/journals currently remain on the owner's
 device; second-device recovery remains work in progress.
 
+The service can also supervise [explicit finite storage enrollments](docs/PRIVATE_CATALOG.md#sharing-the-owners-maintenance-process)
+through the shared Image adapter. Foreground access reuses that same adapter so
+maintenance is stopped and joined before the archive lock is acquired. This new
+binding has lifecycle/contract checks; its combined protected-peer maintenance
+trial, automatic enrollment and grant refresh are still pending.
+
 [Run the private read service and see its evidence boundaries →](docs/OFFLINE_READ.md)
 
 [Build and open the original Files recovery interface →](docs/RECOVERY_WEB.md)

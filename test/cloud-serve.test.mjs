@@ -141,3 +141,72 @@ test('server cleanup failure does not skip catalog cleanup or claim a successful
   await assert.rejects(service.close());
   assert.equal(catalogClosed, true);
 });
+
+test('configured maintenance shares its exact adapter factory with reads and owner uploads', async () => {
+  const entries = [{ config: '/private/core.json', enrollment: '/private/enrollment' }];
+  const order = [], factory = async () => ({});
+  const ownerUploads = { directory: '/private/uploads', space: 'Mine', storageConfig: '/private/template.json' };
+  const service = await startCloudService({ ...CONFIG, storageMaintenance: entries, ownerUploads }, {
+    openMaintenance: async (selected, context) => {
+      assert.deepEqual(selected, entries);
+      assert.equal(context.signal.aborted, false);
+      order.push('maintenance-start');
+      return { storageFactory: factory, status: async () => ({ configured_sessions: 1 }),
+        close: async () => { order.push('maintenance-close'); } };
+    },
+    openCatalog: async (_, context) => {
+      assert.equal(context.storageFactory, factory);
+      order.push('catalog-open');
+      return { close: async () => { order.push('catalog-close'); } };
+    },
+    openUploads: async (_, context) => {
+      assert.equal(context.storageFactory, factory);
+      order.push('uploads-open');
+      return context.base;
+    },
+    startServer: async () => ({ origin: 'http://127.0.0.1:12345',
+      close: async () => { order.push('server-close'); } }),
+  });
+  assert.deepEqual(await service.maintenanceStatus(), { configured_sessions: 1 });
+  await service.close();
+  assert.deepEqual(order, ['maintenance-start', 'catalog-open', 'uploads-open',
+    'server-close', 'catalog-close', 'maintenance-close']);
+});
+
+test('ordinary catalog startup never opens maintenance or changes its storage factory', async () => {
+  const service = await startCloudService(CONFIG, {
+    openMaintenance: async () => { assert.fail('unconfigured maintenance started'); },
+    openCatalog: async (_, context) => {
+      assert.equal(Object.hasOwn(context, 'storageFactory'), false);
+      return { close: async () => {} };
+    },
+    startServer: async () => ({ origin: 'http://127.0.0.1:12345', close: async () => {} }),
+  });
+  assert.equal(await service.maintenanceStatus(), null);
+  await service.close();
+});
+
+test('startup and foreground cleanup failures still join the owned maintenance registry', async () => {
+  const entries = [{ config: '/private/core.json', enrollment: '/private/enrollment' }];
+  let closes = 0;
+  const openMaintenance = async () => ({ storageFactory: async () => ({}),
+    close: async () => { closes++; } });
+  await assert.rejects(startCloudService({ ...CONFIG, storageMaintenance: entries }, {
+    openMaintenance, openCatalog: async () => { throw new Error('catalog unavailable'); },
+  }));
+  assert.equal(closes, 1);
+  const service = await startCloudService({ ...CONFIG, storageMaintenance: entries }, {
+    openMaintenance,
+    openCatalog: async () => ({ close: async () => { throw new Error('catalog cleanup failed'); } }),
+    startServer: async () => ({ origin: 'http://127.0.0.1:12345', close: async () => {} }),
+  });
+  await assert.rejects(service.close());
+  assert.equal(closes, 2);
+});
+
+test('invalid maintenance list cannot reach a factory or change redundancy', async () => {
+  for (const value of [[], [{ config: '/private/c', enrollment: '/private/e', copies: 1 }],
+    [{ config: '/private/c', enrollment: '/private/e' }, { config: '/private/c', enrollment: '/private/f' }]]) {
+    assert.throws(() => validateConfiguration({ ...CONFIG, storageMaintenance: value }));
+  }
+});
