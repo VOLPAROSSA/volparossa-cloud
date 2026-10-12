@@ -186,6 +186,29 @@ test('ordinary catalog startup never opens maintenance or changes its storage fa
   await service.close();
 });
 
+test('v2 upload admission is shared and retained obligations load before background activation and listening', async () => {
+  const policy = { version: 2, expiresAt: 2000, maxSessions: 2, maxChargedBytes: 1024,
+    perArchiveMaxChargedBytes: 512, fromProviderKey: '1'.repeat(64), lifetimeSeconds: 500,
+    renewBeforeSeconds: 600, maximumTurnBytes: 1048576, existing: [] };
+  const order = [], factory = async () => ({});
+  const maintenance = { version: 2, storageFactory: factory, status: async () => ({ version: 2 }),
+    activate: async () => order.push('activate'), close: async () => order.push('maintenance-close') };
+  const backend = { close: async () => order.push('backend-close') };
+  const service = await startCloudService({ ...CONFIG, storageMaintenance: policy,
+    ownerUploads: { directory: '/private/uploads', space: 'Mine', storageConfig: '/private/template.json' } }, {
+    openMaintenance: async selected => { assert.deepEqual(selected, policy); return maintenance; },
+    openCatalog: async (_, context) => { assert.equal(context.storageFactory, factory); return backend; },
+    openUploads: async (_, context) => {
+      assert.equal(context.maintenance, maintenance); assert.equal(context.storageFactory, factory);
+      order.push('discover-retained'); return backend;
+    },
+    startServer: async () => { order.push('listen'); return { origin: 'http://127.0.0.1:12345', close: async () => {} }; },
+  });
+  assert.deepEqual(order, ['discover-retained', 'activate', 'listen']);
+  await service.close();
+  assert.deepEqual(order.slice(-2), ['backend-close', 'maintenance-close']);
+});
+
 test('startup and foreground cleanup failures still join the owned maintenance registry', async () => {
   const entries = [{ config: '/private/core.json', enrollment: '/private/enrollment' }];
   let closes = 0;

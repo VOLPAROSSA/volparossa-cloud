@@ -71,7 +71,7 @@ function lockWorkspace(directory) {
 }
 
 export async function openOwnerUploads({ directory, space, storageConfig, workDirectory,
-  maxFileBytes = 256 * 1024 ** 2 }, { base, signal, storageFactory = path => CoreStorage.open(path) } = {}) {
+  maxFileBytes = 256 * 1024 ** 2 }, { base, signal, storageFactory = path => CoreStorage.open(path), maintenance } = {}) {
   check(nameValid(space) && directory !== workDirectory && Number.isSafeInteger(maxFileBytes) && maxFileBytes > 0 && maxFileBytes <= 8 * 1024 ** 3,
     'INVALID_UPLOAD_CONFIGURATION');
   await privateDirectory(directory);
@@ -93,6 +93,7 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
     await privateDirectory(root);
     if (await absent(join(root, 'catalog'))) {
       check(await absent(join(root, 'READY.json')), 'INVALID_UPLOAD_COMMIT');
+      await maintenance?.recover({ root });
       return; // A pre-publication interrupted owner stage remains retained.
     }
     const backend = await openPrivateCatalog({ catalog: join(root, 'catalog'), workDirectory,
@@ -111,6 +112,11 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
         entry.ready = true;
       }
       entries.set(entry.name, entry);
+      if (maintenance) {
+        const cipher = await readPrivateJSON(join(root, 'bundle/receipt.json'));
+        await maintenance.recover({ root, catalogSha256: entry.catalogHash,
+          cipherSha256: cipher.cipher_sha256, cipherBytes: cipher.cipher_bytes });
+      }
       return entry;
     } catch (error) { await backend.close(); throw error; }
   }
@@ -170,18 +176,27 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
         entry = await loadEntry(id);
       }
       active(requestSignal); controller.signal.throwIfAborted();
-      const core = await storageFactory(join(entry.root, 'core.json'));
       const receipt = await readPrivateJSON(join(entry.root, 'bundle/receipt.json'));
+      // Persist and charge the entire finite archive ceiling before any peer
+      // operation. Failed/uncertain attempts never release that reservation.
+      await maintenance?.reserve({ root: entry.root, catalogSha256: entry.catalogHash,
+        cipherSha256: receipt.cipher_sha256, cipherBytes: receipt.cipher_bytes });
+      const core = await storageFactory(join(entry.root, 'core.json'));
       const input = join(entry.root, 'bundle/file.pgp');
       const planned = await absent(join(entry.root, 'journal'))
         ? await core.create({ input, sha256: receipt.cipher_sha256, alreadyEncrypted: true }, { signal: controller.signal })
         : await core.status({ signal: controller.signal });
       if (planned.local_process_joined !== true) cleanupFailed = true;
       check(planned.status === 'complete' && planned.local_process_joined === true, 'UPLOAD_PLAN_INCOMPLETE');
+      if (maintenance) await maintenance.checkCharge(entry.root, planned.storage);
       const deposited = await core.deposit({ input, alreadyEncrypted: true }, { signal: controller.signal });
       if (deposited.local_process_joined !== true) cleanupFailed = true;
       check(deposited.status === 'complete' && deposited.local_process_joined === true
         && deposited.storage?.fully_redundant_from_retained_receipts === true, 'UPLOAD_STORAGE_INCOMPLETE');
+      if (maintenance) {
+        await maintenance.checkCharge(entry.root, deposited.storage);
+        await maintenance.complete(entry.root, { signal: controller.signal });
+      }
       active(requestSignal); controller.signal.throwIfAborted();
       await publishReady(entry.root, { version: 1, catalogSha256: entry.catalogHash });
       entry.ready = true;

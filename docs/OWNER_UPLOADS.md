@@ -58,6 +58,8 @@ its two-minute default. Explicit service deadlines may still cancel an upload.
 ## Publication, retry and recovery
 
 `PUT` returns **201 only after confirmed storage and durable catalog publication**.
+When the version-2 maintenance policy below is configured, successful enrollment
+and registration of its maintenance process are also required before publication.
 The owner directory holds opaque object names, private recovery bundles, encrypted
 single-file catalogs and core journals. File names and plaintext hashes remain
 inside authenticated encryption, not filenames or public receipts. The new
@@ -90,6 +92,58 @@ ciphertext; small encryption/metadata overhead is included. It is not a disk quo
 upload staging, ciphertext, restore staging and owner journals use additional local
 space. Forced process termination may leave private staging; this slice does not
 claim secure erasure or automatic abandoned-operation retirement.
+
+## Automatic maintenance under finite authority
+
+New uploads can enter core-managed maintenance without a separate enrollment
+command for each file. This is an explicit configuration choice, not permission
+to create unlimited storage obligations. It requires the core's
+`--authorization-expires-at` enrollment support and the pinned Image bridge;
+older binaries are not substitutes.
+
+In the normal service configuration, set `storageMaintenance` to an object with
+**all** the following fields. The outer service configuration remains version 1;
+only this nested policy is version 2. Unknown fields are rejected.
+
+| Field | Meaning and bounds |
+| --- | --- |
+| `version` | Exactly `2`. |
+| `expiresAt` | Owner-selected absolute Unix time in seconds; new admission requires it to be in the future and no more than 31 days away. |
+| `maxSessions` | Shared archive limit, 1–8, including existing enrollments and pending uploads. |
+| `maxChargedBytes` | Shared ceiling for reserved archive authority, at most 8 × 512 GiB. |
+| `perArchiveMaxChargedBytes` | Maximum authorized charge per new archive, at most 512 GiB and no greater than the shared ceiling; must cover at least two encrypted copies. Leave room for repair obligations too. |
+| `fromProviderKey` | One of the upload template's explicit provider keys, as 64 lowercase hexadecimal characters; the source selected for core-managed replacement. |
+| `lifetimeSeconds` | Requested storage-lease lifetime, 1–2,678,400 seconds; provider grants and core checks still apply. |
+| `renewBeforeSeconds` | Core renewal window, 1–2,678,400 seconds. |
+| `maximumTurnBytes` | Core maintenance work limit per turn, 1–134,217,728 bytes. |
+| `existing` | Array of up to eight `{ "config": "/absolute/private/config.json", "enrollment": "/absolute/private/enrollment" }` references; may be empty. Paths must be canonical and distinct. |
+
+Before creating or depositing an archive, the service durably records a private
+maintenance intent and reserves its **full authorized ceiling**, not just the
+bytes currently stored. Existing enrollments and pending uploads consume the
+same budget. This admission reservation is not a second physical-storage ledger,
+a disk quota or proof of reciprocal contribution: the core owns actual accounting,
+placement, redundancy and repair.
+
+The intent binds the original archive, configuration, provider grants, charge
+ceiling and absolute deadline. A retry uses that same intent and journal. After
+deposit, the service checks the core-reported charge bound, enrolls the archive,
+verifies the retained signed authority and starts maintenance through the same
+adapter used by foreground reads. A missing or unconfirmed enrollment leaves the
+upload pending; it cannot receive a successful creation response.
+
+Restart loads retained obligations before starting maintenance or listening for
+requests. It neither extends the original deadline nor silently completes an
+interrupted upload: completing that upload still requires an identical `PUT`.
+Unknown or unverifiable obligations block new admission rather than freeing
+capacity. Already committed files remain readable when maintenance authority
+expires, subject to their existing read rights and available storage.
+
+The existing list form of `storageMaintenance` still supervises only previously
+enrolled archives. Neither form refreshes provider grants automatically. This
+candidate also does **not** automatically release reservations when authority
+expires or storage is retired; safe obligation retirement remains separate work.
+The service supervises maintenance while running, not after it has been stopped.
 
 ## Evidence and remaining scope
 
@@ -132,6 +186,14 @@ this service. Only the storage-provider boundary is an explicit in-memory
 core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source.
 Those local checks alone are not peer evidence; the joined trial above supplies
 the separately verified live upload/recovery result.
+
+The new version-2 maintenance policy has a separate focused check: **50 tests pass
+and one explicitly unstaged OpenCloud SDK test skips** across the upload,
+maintenance, service and private-file suites. These include actual loopback HTTP
+and GPG, enrollment-before-publication, retained reservations, restart, expiry,
+tampering and cancellation. Their core boundary is synthetic. The earlier live
+upload trial did not run this new policy; a joined real-core upload → automatic
+enrollment → repair → restarted read → verified retirement trial remains required.
 
 The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
 original Files file input and Uppy upload, then reloads and reauthenticates. Its
@@ -213,6 +275,6 @@ asserted. This correction does not bypass any cleanup or upload acceptance check
 the later passing trial is recorded above, without reclassifying this failure.
 
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
-shared accounts, concurrent editors, automatic repair/renewal and general writable
-synchronization remain separate work. Neither the read-only trials nor the new
-upload/recovery trial prove full server-independent OpenCloud operation.
+shared accounts, concurrent editors, proven integrated maintenance, grant refresh
+and general writable synchronization remain separate work. Neither the read-only
+trials nor the upload/recovery trial prove full server-independent OpenCloud operation.
