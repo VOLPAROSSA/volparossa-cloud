@@ -105,3 +105,48 @@ test('old Cloud deposit reports remain optional and malformed diagnostics never 
   assert.equal(failed.local_process_joined, true);
   assert.equal((await lstat(changed.state)).isDirectory(), true);
 });
+
+test('Cloud retains v2 initial agent observations without changing ciphertext, journals or charges', async t => {
+  for (const detail of [null, { stage: 'provider_lookup', deadline_scope: 'operation' },
+    { stage: 'unobserved', deadline_scope: 'operation' },
+    { stage: 'tls_handshake', deadline_scope: 'exchange' },
+    { stage: 'challenge', deadline_scope: 'none' }]) {
+    const diagnostics = structuredClone(DIAGNOSTICS);
+    diagnostics.version = 2;
+    Object.assign(diagnostics.failures[0], { operation: 'reserve', stage: 'agent_ready', agent_detail: detail });
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.status, 'incomplete');
+    assert.equal(result.code, 'retained_operation_incomplete');
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+    assert.equal(result.storage.uncertain_payload_bytes, 192);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud does not relabel terminal errors, accept impossible timeouts, or expose private detail', async t => {
+  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready',
+    agent_detail: { stage: 'tls_handshake', deadline_scope: 'none' } };
+  const failures = [{ ...good, stage: 'agent_terminal' }, { ...good, agent_code: 'unknown' },
+    { ...good, agent_code: 'CONTENT_BUSY', agent_detail: { stage: 'tls_handshake', deadline_scope: 'operation' } },
+    { ...good, agent_detail: { stage: 'provider_lookup', deadline_scope: 'exchange' } },
+    { ...good, agent_detail: { stage: 'unobserved', deadline_scope: 'none' } },
+    { ...good, agent_detail: { ...good.agent_detail, raw: 'PRIVATE-PEER-ERROR' } },
+    { ...good, agent_detail: 'PRIVATE-PEER-ERROR' }, { ...DIAGNOSTICS.failures[0] }];
+  for (const failure of failures) {
+    const value = await fixture(t, { version: 2, failures: [failure], omitted_failures: 0 });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
