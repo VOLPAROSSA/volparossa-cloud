@@ -264,7 +264,7 @@ test('Cloud v4 rejects leaking or contradictory observations and old-version fie
     { ...good, detail: { phase: 'ready_write', category: 'timeout', deadline_scope: 'bridge' } },
     { ...good, detail: { phase: 'local_receipt_write', category: 'timeout', deadline_scope: 'remote_wire' } }]
     .map(outcome => diagnosticV4(outcome));
-  for (const version of [1, 2, 3, 6]) invalid.push({ ...diagnosticV4(good), version });
+  for (const version of [1, 2, 3, 7]) invalid.push({ ...diagnosticV4(good), version });
   for (const key of ['agent_outcome', 'agent_detail']) {
     const missing = diagnosticV4(good); delete missing.failures[0][key]; invalid.push(missing);
   }
@@ -331,6 +331,75 @@ test('Cloud v5 rejects counterfeit stream scope and historical field injection',
     assert.equal(result.local_process_joined, true);
     assert.equal(result.remote_cleanup_confirmed, false);
     assert.ok(!JSON.stringify(result).includes('PRIVATE-STREAM-CANARY'));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v6 challenge substages and coarse timing remain diagnostic across the real child boundary', async t => {
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  const buckets = ['under_1s', '1_to_5s', '5_to_15s', '15_to_30s', '30_to_60s', '60_to_90s', '90_to_120s', 'at_least_120s'];
+  const phases = ['selector_write_flush', 'grant_write_flush', 'challenge_read_verify'];
+  const cases = [null, { stage: 'challenge', deadline_scope: 'none', tls_failure: null, stream_failure: null, challenge: null }];
+  for (const [index, before_challenge] of buckets.entries()) for (const phase of phases) {
+    cases.push({ stage: 'challenge', deadline_scope: ['none', 'operation', 'exchange'][index % 3],
+      tls_failure: null, stream_failure: null,
+      challenge: { phase, before_challenge, in_challenge: buckets[(index + 3) % buckets.length] } });
+  }
+  for (const agent_detail of cases) {
+    const diagnostics = { version: 6, failures: [{ ...DIAGNOSTICS.failures[0], stage: 'agent_ready',
+      agent_detail, agent_outcome: null }], omitted_failures: 0 };
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    if (agent_detail !== null) assert.ok(Object.isFrozen(deposit_diagnostics.failures[0].agent_detail));
+    if (agent_detail?.challenge) assert.ok(Object.isFrozen(deposit_diagnostics.failures[0].agent_detail.challenge));
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v6 rejects wrong challenge scope, raw timing and historical nullable-key injection', async t => {
+  const challenge = { phase: 'grant_write_flush', before_challenge: '5_to_15s', in_challenge: 'under_1s' };
+  const detail = { stage: 'challenge', deadline_scope: 'none', tls_failure: null, stream_failure: null, challenge };
+  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready', agent_detail: detail, agent_outcome: null };
+  const failures = [{ ...good, stage: 'wire_receipt' }, { ...good, category: 'io', agent_code: null },
+    ...['CONTENT_POLICY', 'CONTENT_BUSY', 'CONTENT_INVALID', 'unknown'].map(agent_code => ({ ...good, agent_code })),
+    ...['stream_open', 'tls_handshake', 'provider_lookup'].map(stage => ({ ...good, agent_detail: { ...detail, stage } })),
+    ...['bridge', 'remote_wire'].map(deadline_scope => ({ ...good, agent_detail: { ...detail, deadline_scope } })),
+    { ...good, agent_detail: { ...detail, tls_failure: 'io' } },
+    { ...good, agent_detail: { ...detail, stream_failure: 'open_tcp_write' } },
+    { ...good, agent_detail: { ...detail, challenge: { ...challenge, timestamp: 1700000000 } } },
+    { ...good, agent_detail: { ...detail, challenge: 'PRIVATE-CHALLENGE-CANARY' } }];
+  for (const field of Object.keys(challenge)) {
+    for (const value of ['PRIVATE-CHALLENGE-CANARY', 'unknown', '', null, 0, 5000, false, [], {}]) {
+      failures.push({ ...good, agent_detail: { ...detail, challenge: { ...challenge, [field]: value } } });
+    }
+    const missing = { ...challenge }; delete missing[field];
+    failures.push({ ...good, agent_detail: { ...detail, challenge: missing } });
+  }
+  for (const field of Object.keys(detail)) {
+    const missing = { ...detail }; delete missing[field]; failures.push({ ...good, agent_detail: missing });
+  }
+  const invalid = failures.map(failure => ({ version: 6, failures: [failure], omitted_failures: 0 }));
+  for (const version of [1, 2, 3, 4, 5]) for (const injected of [null, challenge]) {
+    const failure = { ...good, agent_detail: { stage: 'challenge', deadline_scope: 'none', challenge: injected } };
+    if (version < 4) delete failure.agent_outcome;
+    if (version >= 3) failure.agent_detail.tls_failure = null;
+    if (version >= 5) failure.agent_detail.stream_failure = null;
+    invalid.push({ version, failures: [failure], omitted_failures: 0 });
+  }
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-CHALLENGE-CANARY'));
     assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
   }
 });
