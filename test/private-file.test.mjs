@@ -66,7 +66,7 @@ async function noStaging(directory) {
 
 test('exact reused Image source and license agree with their immutable provenance', async () => {
   const pin = JSON.parse(await readFile(join(ROOT, 'third_party/volparossa-image-source.json')));
-  assert.equal(pin.revision, '3b5830476dabd548debfdfade4fdf72acb4fa992');
+  assert.equal(pin.revision, 'ec6b9dca5789a60447c643652c93643b9a6c4af6');
   assert.equal(pin.local_modifications, false);
   for (const record of Object.values(pin.files)) {
     const bytes = await readFile(join(ROOT, record.local));

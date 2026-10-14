@@ -207,3 +207,94 @@ test('Cloud v3 rejects false TLS scope, raw details, duplicate copies and v2 fie
     assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
   }
 });
+
+function diagnosticV4(agent_outcome = null, changes = {}) {
+  return { version: 4, failures: [{ ...DIAGNOSTICS.failures[0], category: 'io', agent_code: null,
+    agent_detail: null, agent_outcome, ...changes }], omitted_failures: 0 };
+}
+
+test('Cloud v4 preserves original failure and custody across nullable and observed local outcomes', async t => {
+  const cases = [diagnosticV4(),
+    ...['missing', 'pending', 'expired', 'query_failed', 'query_timeout']
+      .map(status => diagnosticV4({ status, detail: null })),
+    ...[{ phase: 'remote_receipt_read', category: 'io', deadline_scope: 'none' },
+      { phase: 'admission', category: 'timeout', deadline_scope: 'bridge' },
+      { phase: 'remote_payload_verify', category: 'timeout', deadline_scope: 'remote_wire' },
+      { phase: 'terminal_write', category: 'timeout', deadline_scope: 'operation' },
+      { phase: 'provider_tls_close', category: 'timeout', deadline_scope: 'exchange' },
+      { phase: 'ready_write', category: 'cancelled', deadline_scope: 'none' }]
+      .map(detail => diagnosticV4({ status: 'observed', detail })),
+    diagnosticV4(null, { stage: 'agent_ready', category: 'agent_rejected', agent_code: 'CONTENT_UNAVAILABLE',
+      agent_detail: { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'authentication' } })];
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  for (const diagnostics of cases) {
+    const value = await fixture(t, diagnostics);
+    const journal = join(value.state, 'owner-state');
+    await writeFile(journal, 'PRIVATE-JOURNAL-CANARY', { mode: 0o600 });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    const outcome = deposit_diagnostics.failures[0].agent_outcome;
+    assert.ok(Object.isFrozen(deposit_diagnostics) && Object.isFrozen(deposit_diagnostics.failures[0]));
+    if (outcome) {
+      assert.ok(Object.isFrozen(outcome));
+      if (outcome.detail) assert.ok(Object.isFrozen(outcome.detail));
+      assert.equal(deposit_diagnostics.failures[0].category, 'io');
+    }
+    for (const canary of [value.root, ...KEYS, 'PRIVATE-JOURNAL-CANARY', 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) {
+      assert.ok(!JSON.stringify(result).includes(canary));
+    }
+    assert.equal(await readFile(journal, 'utf8'), 'PRIVATE-JOURNAL-CANARY');
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v4 rejects leaking or contradictory observations and old-version field injection', async t => {
+  const detail = { phase: 'remote_receipt_read', category: 'io', deadline_scope: 'none' };
+  const good = { status: 'observed', detail };
+  const invalid = ['PRIVATE-PEER-ERROR', {}, [], { ...good, original_request_id: 'PRIVATE-PEER-ERROR' },
+    { status: 'observed' }, { status: 'observed', detail: null }, { ...good, status: 'missing' },
+    { ...good, status: 'PRIVATE-PEER-ERROR' }, { ...good, detail: { ...detail, raw: 'PRIVATE-PEER-ERROR' } },
+    { ...good, detail: { ...detail, phase: 'unobserved' } },
+    { ...good, detail: { ...detail, category: 'unobserved' } },
+    { ...good, detail: { ...detail, category: 'timeout' } },
+    { ...good, detail: { ...detail, deadline_scope: 'operation' } },
+    { ...good, detail: { phase: 'ready_write', category: 'timeout', deadline_scope: 'bridge' } },
+    { ...good, detail: { phase: 'local_receipt_write', category: 'timeout', deadline_scope: 'remote_wire' } }]
+    .map(outcome => diagnosticV4(outcome));
+  for (const version of [1, 2, 3, 5]) invalid.push({ ...diagnosticV4(good), version });
+  for (const key of ['agent_outcome', 'agent_detail']) {
+    const missing = diagnosticV4(good); delete missing.failures[0][key]; invalid.push(missing);
+  }
+  for (const stage of ['agent_ready', 'signed_request', 'accounting']) invalid.push(diagnosticV4(good, { stage }));
+  invalid.push(diagnosticV4(good, { agent_detail: { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'io' } }));
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud vendored helpers retain exact local provenance sizes and digests', async () => {
+  const provenance = JSON.parse(await readFile(new URL('../third_party/volparossa-image-source.json', import.meta.url), 'utf8'));
+  assert.equal(provenance.repository, 'https://github.com/VOLPAROSSA/volparossa-image');
+  assert.match(provenance.revision, /^[0-9a-f]{40}$/);
+  assert.equal(provenance.local_modifications, false);
+  assert.deepEqual(Object.keys(provenance.files).sort(), ['LICENSE', 'scripts/immich_snapshot.py', 'src/core-storage.mjs']);
+  for (const [source, entry] of Object.entries(provenance.files)) {
+    const name = source.split('/').at(-1);
+    assert.equal(entry.local, `vendor/volparossa-image/${name}`);
+    const bytes = await readFile(new URL(`../${entry.local}`, import.meta.url));
+    assert.equal(bytes.length, entry.bytes);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
+  }
+});
