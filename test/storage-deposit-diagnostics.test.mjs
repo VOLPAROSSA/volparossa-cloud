@@ -264,7 +264,7 @@ test('Cloud v4 rejects leaking or contradictory observations and old-version fie
     { ...good, detail: { phase: 'ready_write', category: 'timeout', deadline_scope: 'bridge' } },
     { ...good, detail: { phase: 'local_receipt_write', category: 'timeout', deadline_scope: 'remote_wire' } }]
     .map(outcome => diagnosticV4(outcome));
-  for (const version of [1, 2, 3, 5]) invalid.push({ ...diagnosticV4(good), version });
+  for (const version of [1, 2, 3, 6]) invalid.push({ ...diagnosticV4(good), version });
   for (const key of ['agent_outcome', 'agent_detail']) {
     const missing = diagnosticV4(good); delete missing.failures[0][key]; invalid.push(missing);
   }
@@ -280,6 +280,57 @@ test('Cloud v4 rejects leaking or contradictory observations and old-version fie
     assert.equal(result.remote_cleanup_confirmed, false);
     assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
     assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v5 stream diagnostics cross the child boundary without changing custody or charges', async t => {
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  for (const stream_failure of [null, 'policy', 'route_state', 'route_material', 'flow_acquire',
+    'transport_certificate', 'transport_tls', 'initial_paths', 'open_tcp_write', 'subflow_readiness', 'stream_attachment']) {
+    const diagnostics = { version: 5, failures: [{ ...DIAGNOSTICS.failures[0], stage: 'agent_ready',
+      agent_detail: { stage: 'stream_open', deadline_scope: 'none', tls_failure: null, stream_failure },
+      agent_outcome: null }], omitted_failures: 0 };
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    assert.ok(Object.isFrozen(deposit_diagnostics.failures[0].agent_detail));
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v5 rejects counterfeit stream scope and historical field injection', async t => {
+  const detail = { stage: 'stream_open', deadline_scope: 'none', tls_failure: null, stream_failure: 'open_tcp_write' };
+  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready', agent_detail: detail, agent_outcome: null };
+  const failures = [{ ...good, stage: 'agent_terminal' }, { ...good, category: 'io', agent_code: null },
+    ...['CONTENT_POLICY', 'CONTENT_BUSY', 'CONTENT_INVALID', 'unknown'].map(agent_code => ({ ...good, agent_code })),
+    ...['operation', 'exchange'].map(deadline_scope => ({ ...good, agent_detail: { ...detail, deadline_scope } })),
+    ...['route_connect', 'provider_lookup', 'tls_handshake', 'challenge'].map(stage => ({ ...good, agent_detail: { ...detail, stage } })),
+    ...['PRIVATE-STREAM-CANARY', 'unknown', 0, false, [], {}].map(stream_failure => ({ ...good, agent_detail: { ...detail, stream_failure } })),
+    { ...good, agent_detail: { ...detail, tls_failure: 'io' } },
+    { ...good, agent_detail: { ...detail, raw: 'PRIVATE-STREAM-CANARY' } }];
+  for (const key of Object.keys(detail)) {
+    const missing = { ...detail }; delete missing[key]; failures.push({ ...good, agent_detail: missing });
+  }
+  const invalid = failures.map(failure => ({ version: 5, failures: [failure], omitted_failures: 0 }));
+  for (const version of [2, 3, 4]) {
+    const failure = { ...good }; if (version < 4) delete failure.agent_outcome;
+    invalid.push({ version, failures: [failure], omitted_failures: 0 });
+    invalid.push({ version, failures: [{ ...failure, agent_detail: { ...detail, stream_failure: null } }], omitted_failures: 0 });
+  }
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-STREAM-CANARY'));
     assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
   }
 });
