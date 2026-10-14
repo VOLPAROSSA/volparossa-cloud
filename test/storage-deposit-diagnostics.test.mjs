@@ -150,3 +150,60 @@ test('Cloud does not relabel terminal errors, accept impossible timeouts, or exp
     assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
   }
 });
+
+test('Cloud v3 carries exact nullable TLS classes without changing ciphertext, accounting or outcome', async t => {
+  const details = [null, { stage: 'provider_lookup', deadline_scope: 'operation', tls_failure: null },
+    { stage: 'tls_handshake', deadline_scope: 'exchange', tls_failure: null },
+    ...[null, 'offer', 'configuration', 'handshake_deadline', 'authentication', 'tls_other', 'io']
+      .map(tls_failure => ({ stage: 'tls_handshake', deadline_scope: 'none', tls_failure }))];
+  for (const agent_detail of details) {
+    const diagnostics = { version: 3, failures: [{ ...DIAGNOSTICS.failures[0], operation: 'finalize',
+      stage: 'agent_ready', agent_detail }], omitted_failures: 0 };
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.status, 'incomplete');
+    assert.equal(result.code, 'retained_operation_incomplete');
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    if (agent_detail) assert.ok(Object.isFrozen(result.storage.deposit_diagnostics.failures[0].agent_detail));
+    assert.equal(result.storage.uncertain_payload_bytes, 192);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v3 rejects false TLS scope, raw details, duplicate copies and v2 field injection', async t => {
+  const detail = { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'io' };
+  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready', agent_detail: detail };
+  const failures = [{ ...good, stage: 'agent_terminal' },
+    ...['CONTENT_INVALID', 'CONTENT_BUSY', 'CONTENT_POLICY', 'unknown']
+      .map(agent_code => ({ ...good, agent_code })),
+    ...['operation', 'exchange'].map(deadline_scope => ({ ...good, agent_detail: { ...detail, deadline_scope } })),
+    ...['provider_lookup', 'stream_open', 'challenge']
+      .map(stage => ({ ...good, agent_detail: { ...detail, stage } })),
+    ...['unobserved', 'PRIVATE-PEER-ERROR', 0, false, {}, []]
+      .map(tls_failure => ({ ...good, agent_detail: { ...detail, tls_failure } })),
+    { ...good, agent_detail: { stage: 'tls_handshake', deadline_scope: 'none' } },
+    { ...good, agent_detail: { ...detail, raw: 'PRIVATE-PEER-ERROR' } }];
+  const invalid = failures.map(failure => ({ version: 3, failures: [failure], omitted_failures: 0 }));
+  invalid.push({ version: 2, failures: [{ ...good, agent_detail: { ...detail, tls_failure: null } }], omitted_failures: 0 },
+    { version: 3, failures: [good, good], omitted_failures: 0 },
+    { version: 3, failures: Array(9).fill(good), omitted_failures: 0 },
+    { version: 3, failures: [good], omitted_failures: 1 },
+    { version: 4, failures: [good], omitted_failures: 0 });
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics);
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});

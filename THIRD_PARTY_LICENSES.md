@@ -7,14 +7,14 @@ contains no vendored OpenCloud implementation or executable distribution.
 | --- | --- | --- |
 | OpenCloud server v7.2.4 | `opencloud-eu/opencloud@1770793f2657e153836c32d32dd6d256b8531d3d` | Apache-2.0; production WebDAV/backend compatibility target. |
 | OpenCloud Web v8.0.0 | `opencloud-eu/web@11e699ac82fda4dd113ac3ceb2ecb2dd74574045` | AGPL-3.0; explicit optional source build of the original Files UI with a recorded owner-recovery patch. The published SDK is pinned separately for interoperability tests. |
-| VOLPAROSSA Image helpers | `VOLPAROSSA/volparossa-image@87a8016652db629a0afefb41d88b3056539bee17` | GPL-3.0-only; unchanged OpenPGP process helpers and private core-storage/owner-maintenance bridge with absolute authorization deadlines, including their complete license. |
+| VOLPAROSSA Image helpers | `VOLPAROSSA/volparossa-image@3b5830476dabd548debfdfade4fdf72acb4fa992` | GPL-3.0-only; unchanged OpenPGP process helpers and private core-storage/owner-maintenance bridge with absolute authorization deadlines, including their complete license. |
 
 Keep original license/notice files with any future incorporated upstream source;
 the project's GPL-3.0-only label does not replace upstream component licenses.
 
 - [Server license at the pin](https://github.com/opencloud-eu/opencloud/blob/1770793f2657e153836c32d32dd6d256b8531d3d/LICENSE)
 - [Web source at the pin](https://github.com/opencloud-eu/web/tree/11e699ac82fda4dd113ac3ceb2ecb2dd74574045)
-- [Image source at the pin](https://github.com/VOLPAROSSA/volparossa-image/tree/87a8016652db629a0afefb41d88b3056539bee17)
+- [Image source at the pin](https://github.com/VOLPAROSSA/volparossa-image/tree/3b5830476dabd548debfdfade4fdf72acb4fa992)
 
 `third_party/volparossa-image-source.json` records the exact original paths,
 local paths, byte lengths and SHA-256 digests. The three files under
