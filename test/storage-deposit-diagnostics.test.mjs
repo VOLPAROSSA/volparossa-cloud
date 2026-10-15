@@ -63,6 +63,8 @@ async function fixture(t, diagnostics, configChanges = {}) {
 if (process.argv[6] !== 'deposit') process.exit(17);
 if (process.argv.filter(value => value === '--append-diagnostics-v7').length !== ${configChanges.appendDiagnosticsV7 === true ? 1 : 0}) process.exit(18);
 if (${configChanges.appendDiagnosticsV7 === true} && process.argv[9] !== '--append-diagnostics-v7') process.exit(19);
+if (process.argv.filter(value => value === '--flow-acquire-diagnostics-v8').length !== ${configChanges.flowAcquireDiagnosticsV8 === true ? 1 : 0}) process.exit(20);
+if (${configChanges.flowAcquireDiagnosticsV8 === true} && process.argv[9] !== '--flow-acquire-diagnostics-v8') process.exit(21);
 process.stdout.write(${JSON.stringify(JSON.stringify(rawReport(diagnostics)))});
 process.exitCode = 1;
 `, { mode: 0o700 });
@@ -481,6 +483,124 @@ test('Cloud absent or false opt-in retains historical optional reports and rejec
       assert.equal(result.local_process_joined, true);
     }
   }
+});
+
+function diagnosticV8(flow_acquire = null, changes = {}) {
+  return { ...diagnosticV4(null, { operation: 'finalize', stage: 'agent_ready', category: 'agent_rejected',
+    agent_code: 'CONTENT_UNAVAILABLE', agent_detail: { stage: 'stream_open', deadline_scope: 'none',
+      tls_failure: null, stream_failure: 'flow_acquire', challenge: null, flow_acquire }, ...changes }), version: 8 };
+}
+
+const FLOW_PAIRS = {
+  source_port: ['entropy'],
+  retirement_drain: ['unconfirmed', 'io', 'helper_kernel', 'helper_capacity', 'helper_unavailable',
+    'helper_cleanup_incomplete', 'helper_other_rejection', 'helper_timeout', 'helper_io',
+    'helper_validation', 'helper_authority', 'helper_correlation', 'helper_runtime_changed'],
+  material: ['metadata', 'topology'], slot_reservation: ['unconfirmed', 'local_capacity', 'local_unavailable'],
+  helper_acquire: ['helper_kernel', 'helper_capacity', 'helper_unavailable', 'helper_not_found',
+    'helper_cleanup_incomplete', 'helper_other_rejection', 'helper_timeout', 'helper_io',
+    'helper_validation', 'helper_authority', 'helper_correlation', 'helper_runtime_changed'],
+  descriptor_clone: ['io'], descriptor_adoption: ['metadata', 'io'], flow_metadata: ['metadata'],
+};
+function flowDetail(stage = 'helper_acquire', reason = 'helper_capacity', rounds = 1) {
+  return { rounds, first: { stage, reason }, last: { stage, reason } };
+}
+
+test('Cloud explicit v8 carries all 35 typed flow pairs across its real child boundary', async t => {
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  const cases = [null, { rounds: 8, first: { stage: 'helper_acquire', reason: 'helper_capacity' },
+    last: { stage: 'slot_reservation', reason: 'local_capacity' } }];
+  let pairs = 0;
+  for (const [stage, reasons] of Object.entries(FLOW_PAIRS)) for (const reason of reasons) {
+    pairs++;
+    for (const rounds of [1, 8]) cases.push(flowDetail(stage, reason, rounds));
+  }
+  assert.equal(pairs, 35);
+  for (const flow of cases) {
+    const diagnostics = diagnosticV8(flow);
+    const value = await fixture(t, diagnostics, { flowAcquireDiagnosticsV8: true });
+    const journal = join(value.state, 'owner-state');
+    await writeFile(journal, 'PRIVATE-FLOW-CANARY', { mode: 0o600 });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    const observed = deposit_diagnostics.failures[0].agent_detail.flow_acquire;
+    if (observed) assert.ok(Object.isFrozen(observed) && Object.isFrozen(observed.first) && Object.isFrozen(observed.last));
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE', 'PRIVATE-FLOW-CANARY']) {
+      assert.ok(!JSON.stringify(result).includes(canary));
+    }
+    assert.equal(await readFile(journal, 'utf8'), 'PRIVATE-FLOW-CANARY');
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v8 refuses malformed flow, wrong scopes, private text and silent downgrade', async t => {
+  const invalid = [undefined, DIAGNOSTICS, diagnosticV7(),
+    diagnosticV8(flowDetail('retirement_drain', 'helper_not_found')),
+    diagnosticV8(flowDetail('source_port', 'helper_capacity')),
+    diagnosticV8(flowDetail('unobserved', 'entropy')),
+    diagnosticV8({ ...flowDetail(), last: { stage: 'source_port', reason: 'entropy' } }),
+    diagnosticV8('PRIVATE-FLOW-CANARY'), diagnosticV8({ ...flowDetail(), raw: 'PRIVATE-FLOW-CANARY' }),
+    diagnosticV8({ ...flowDetail(), first: { stage: 'helper_acquire', reason: 'PRIVATE-FLOW-CANARY' } }),
+    diagnosticV8(flowDetail(), { stage: 'agent_terminal' }), diagnosticV8(flowDetail(), { agent_code: 'CONTENT_BUSY' })];
+  for (const rounds of [0, 9, true, '1', null, 1.5]) invalid.push(diagnosticV8({ ...flowDetail(), rounds }));
+  for (const field of ['rounds', 'first', 'last']) {
+    const flow = flowDetail(); delete flow[field]; invalid.push(diagnosticV8(flow));
+  }
+  for (const [field, value] of [['stage', 'tls_handshake'], ['deadline_scope', 'operation'],
+    ['stream_failure', null], ['tls_failure', 'io'], ['flow_acquire', {}]]) {
+    const bad = diagnosticV8(flowDetail()); bad.failures[0].agent_detail[field] = value; invalid.push(bad);
+  }
+  const missing = diagnosticV8(); delete missing.failures[0].agent_detail.flow_acquire; invalid.push(missing);
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics, { flowAcquireDiagnosticsV8: true });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report', JSON.stringify(diagnostics));
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-FLOW-CANARY'));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v8 config is strict and does not change historical default or explicit v7 reports', async t => {
+  for (const configChanges of [{}, { flowAcquireDiagnosticsV8: false }, { appendDiagnosticsV7: true },
+    { appendDiagnosticsV7: true, flowAcquireDiagnosticsV8: false }]) {
+    const diagnostics = configChanges.appendDiagnosticsV7 ? diagnosticV7() : DIAGNOSTICS;
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, configChanges));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+    const unsolicited = await storePrivateFile('deposit', await fixture(t, diagnosticV8(), configChanges));
+    assert.equal(unsolicited.code, 'invalid_core_report');
+    assert.equal(unsolicited.storage, null);
+    const misversioned = { ...diagnosticV8(), version: configChanges.appendDiagnosticsV7 ? 7 : 6 };
+    assert.equal((await storePrivateFile('deposit', await fixture(t, misversioned, configChanges))).code, 'invalid_core_report');
+  }
+  for (const value of [null, 'true', true, 1, 0, [], {}]) {
+    const configChanges = { flowAcquireDiagnosticsV8: value, ...(value === true ? { appendDiagnosticsV7: true } : {}) };
+    await assert.rejects(storePrivateFile('deposit', await fixture(t, diagnosticV8(), configChanges)),
+      { code: 'invalid_configuration' });
+  }
+});
+
+test('Cloud selected v8 retains exact nullable APPEND timing without inventing flow facts', async t => {
+  const timing = { before_payload: 'under_1s', in_payload_write_flush: '1_to_5s', in_receipt_read: '90_to_120s' };
+  for (const diagnostics of [{ ...diagnosticV7(timing), version: 8 },
+    { ...diagnosticV7(null, 'remote_receipt_read', { agent_outcome: null }), version: 8 },
+    { ...diagnosticV7(null, 'remote_receipt_read', { agent_outcome: { status: 'missing', detail: null, append_timing: null } }), version: 8 }]) {
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, { flowAcquireDiagnosticsV8: true }));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+    assert.equal(result.storage.deposit_diagnostics.failures[0].agent_detail, null);
+  }
+  const invalid = { ...diagnosticV7({ ...timing, raw: 'PRIVATE-FLOW-CANARY' }), version: 8 };
+  const result = await storePrivateFile('deposit', await fixture(t, invalid, { flowAcquireDiagnosticsV8: true }));
+  assert.equal(result.code, 'invalid_core_report');
+  assert.equal(result.storage, null);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE-FLOW-CANARY'));
 });
 
 test('Cloud vendored helpers retain exact local provenance sizes and digests', async () => {
