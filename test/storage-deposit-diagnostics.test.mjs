@@ -39,7 +39,7 @@ function rawReport(diagnostics) {
   };
 }
 
-async function fixture(t, diagnostics) {
+async function fixture(t, diagnostics, configChanges = {}) {
   const root = await mkdtemp(join(tmpdir(), 'cloud-deposit-contract-'));
   await chmod(root, 0o700);
   const server = createServer(connection => connection.destroy());
@@ -61,6 +61,8 @@ async function fixture(t, diagnostics) {
   const binary = join(root, 'synthetic-core');
   await writeFile(binary, `#!${process.execPath}
 if (process.argv[6] !== 'deposit') process.exit(17);
+if (process.argv.filter(value => value === '--append-diagnostics-v7').length !== ${configChanges.appendDiagnosticsV7 === true ? 1 : 0}) process.exit(18);
+if (${configChanges.appendDiagnosticsV7 === true} && process.argv[9] !== '--append-diagnostics-v7') process.exit(19);
 process.stdout.write(${JSON.stringify(JSON.stringify(rawReport(diagnostics)))});
 process.exitCode = 1;
 `, { mode: 0o700 });
@@ -68,7 +70,7 @@ process.exitCode = 1;
   await writeFile(config, JSON.stringify({ version: 1, coreBinary: binary, controlSocket: socket,
     identity: join(root, 'identity'), passphraseFile: join(root, 'passphrase'), stateDirectory: state,
     providers: KEYS.map((key, index) => ({ key, grant: join(root, `grant${index}`) })),
-    fragmentBytes: 32, lifetimeSeconds: 600, deadlineMs: 3000,
+    fragmentBytes: 32, lifetimeSeconds: 600, deadlineMs: 3000, ...configChanges,
   }), { mode: 0o600 });
   return { root, state, bundle, config };
 }
@@ -401,6 +403,83 @@ test('Cloud v6 rejects wrong challenge scope, raw timing and historical nullable
     assert.equal(result.remote_cleanup_confirmed, false);
     assert.ok(!JSON.stringify(result).includes('PRIVATE-CHALLENGE-CANARY'));
     assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+function diagnosticV7(append_timing = null, phase = 'remote_receipt_read', changes = {}) {
+  return { ...diagnosticV4({ status: 'observed', detail: { phase, category: 'io', deadline_scope: 'none' },
+    append_timing }, changes), version: 7 };
+}
+
+test('Cloud opt-in v7 crosses the actual child boundary with exact finite timings and unchanged accounting', async t => {
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  const cases = [diagnosticV7(), diagnosticV7(null, 'remote_receipt_read', { agent_outcome: null }),
+    diagnosticV7(null, 'remote_receipt_read', { agent_outcome: { status: 'missing', detail: null, append_timing: null } }),
+    diagnosticV7(null, 'remote_receipt_read', { operation: 'finalize' })];
+  for (const bucket of ['under_1s', '1_to_5s', '5_to_15s', '15_to_30s',
+    '30_to_60s', '60_to_90s', '90_to_120s', 'at_least_120s']) {
+    const timing = { before_payload: bucket, in_payload_write_flush: bucket, in_receipt_read: null };
+    cases.push(diagnosticV7(timing, 'remote_payload_write'), diagnosticV7({ ...timing, in_receipt_read: bucket }));
+  }
+  for (const diagnostics of cases) {
+    const value = await fixture(t, diagnostics, { appendDiagnosticsV7: true });
+    const journal = join(value.state, 'owner-state');
+    await writeFile(journal, 'PRIVATE-APPEND-CANARY', { mode: 0o600 });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    const timing = deposit_diagnostics.failures[0].agent_outcome?.append_timing;
+    if (timing) assert.ok(Object.isFrozen(timing));
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE', 'PRIVATE-APPEND-CANARY']) {
+      assert.ok(!JSON.stringify(result).includes(canary));
+    }
+    assert.equal(await readFile(journal, 'utf8'), 'PRIVATE-APPEND-CANARY');
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v7 refuses missing or raw timing, wrong bindings and silent schema downgrade', async t => {
+  const timing = { before_payload: 'under_1s', in_payload_write_flush: '1_to_5s', in_receipt_read: '90_to_120s' };
+  const invalid = [undefined, DIAGNOSTICS, { ...diagnosticV4(), version: 6 },
+    diagnosticV7({ ...timing, phase: 'remote_receipt_read' }),
+    diagnosticV7({ ...timing, elapsed_ms: 120000 }), diagnosticV7(timing, 'remote_payload_write'),
+    diagnosticV7({ ...timing, in_receipt_read: null }), diagnosticV7(timing, 'remote_receipt_verify'),
+    diagnosticV7(timing, 'remote_receipt_read', { operation: 'finalize' }),
+    diagnosticV7(timing, 'remote_receipt_read', { operation: 'reserve' }),
+    diagnosticV7(null, 'remote_receipt_read', { agent_outcome: { status: 'pending', detail: null, append_timing: timing } }),
+    diagnosticV7('PRIVATE-APPEND-CANARY')];
+  for (const field of Object.keys(timing)) {
+    const missing = { ...timing }; delete missing[field]; invalid.push(diagnosticV7(missing));
+    for (const value of ['PRIVATE-APPEND-CANARY', false, 1, [], {}]) invalid.push(diagnosticV7({ ...timing, [field]: value }));
+  }
+  const missingTiming = diagnosticV7(); delete missingTiming.failures[0].agent_outcome.append_timing; invalid.push(missingTiming);
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics, { appendDiagnosticsV7: true });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report', JSON.stringify(diagnostics));
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-APPEND-CANARY'));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud absent or false opt-in retains historical optional reports and rejects unsolicited v7', async t => {
+  for (const configChanges of [{}, { appendDiagnosticsV7: false }]) {
+    for (const diagnostics of [undefined, DIAGNOSTICS, { ...diagnosticV4(), version: 6 }]) {
+      const result = await storePrivateFile('deposit', await fixture(t, diagnostics, configChanges));
+      assert.equal(result.status, 'incomplete');
+      assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    }
+    for (const diagnostics of [diagnosticV7(), { ...diagnosticV7(), version: 6 }]) {
+      const result = await storePrivateFile('deposit', await fixture(t, diagnostics, configChanges));
+      assert.equal(result.code, 'invalid_core_report');
+      assert.equal(result.storage, null);
+      assert.equal(result.local_process_joined, true);
+    }
   }
 });
 
