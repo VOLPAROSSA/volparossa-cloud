@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { storePrivateFile } from '../src/private-file.mjs';
+import { run as runCloudFile } from '../scripts/cloud-file.mjs';
 
 const KEYS = ['11'.repeat(32), '22'.repeat(32), '33'.repeat(32)];
 const CIPHER = Buffer.alloc(96, 0xa5);
@@ -65,6 +66,8 @@ if (process.argv.filter(value => value === '--append-diagnostics-v7').length !==
 if (${configChanges.appendDiagnosticsV7 === true} && process.argv[9] !== '--append-diagnostics-v7') process.exit(19);
 if (process.argv.filter(value => value === '--flow-acquire-diagnostics-v8').length !== ${configChanges.flowAcquireDiagnosticsV8 === true ? 1 : 0}) process.exit(20);
 if (${configChanges.flowAcquireDiagnosticsV8 === true} && process.argv[9] !== '--flow-acquire-diagnostics-v8') process.exit(21);
+if (process.argv.filter(value => value === '--tls-close-diagnostics-v9').length !== ${configChanges.tlsCloseDiagnosticsV9 === true ? 1 : 0}) process.exit(22);
+if (${configChanges.tlsCloseDiagnosticsV9 === true} && process.argv[9] !== '--tls-close-diagnostics-v9') process.exit(23);
 process.stdout.write(${JSON.stringify(JSON.stringify(rawReport(diagnostics)))});
 process.exitCode = 1;
 `, { mode: 0o700 });
@@ -601,6 +604,116 @@ test('Cloud selected v8 retains exact nullable APPEND timing without inventing f
   assert.equal(result.code, 'invalid_core_report');
   assert.equal(result.storage, null);
   assert.ok(!JSON.stringify(result).includes('PRIVATE-FLOW-CANARY'));
+});
+
+function diagnosticV9(tls_close_failure = null) {
+  return { ...diagnosticV4({ status: 'observed', detail: { phase: 'transport_tls_close',
+    category: 'unavailable', deadline_scope: 'none' }, append_timing: null, tls_close_failure },
+  { operation: 'reserve' }), version: 9 };
+}
+
+test('Cloud script carries all four v9 close reasons through the default adapter and real child', async t => {
+  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
+  for (const reason of [null, 'shutdown_io', 'read_io', 'trailing_data', 'internal_deadline']) {
+    const diagnostics = diagnosticV9(reason);
+    const value = await fixture(t, diagnostics, { tlsCloseDiagnosticsV9: true });
+    const journal = join(value.state, 'owner-state');
+    await writeFile(journal, 'PRIVATE-CLOSE-CANARY', { mode: 0o600 });
+    const result = await runCloudFile({ operation: 'deposit', config: value.config, bundle: value.bundle });
+    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
+    assert.ok(Object.isFrozen(result.storage.deposit_diagnostics.failures[0].agent_outcome));
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    assert.deepEqual(accounting, baseline.storage);
+    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE', 'PRIVATE-CLOSE-CANARY']) {
+      assert.ok(!JSON.stringify(result).includes(canary));
+    }
+    assert.equal(await readFile(journal, 'utf8'), 'PRIVATE-CLOSE-CANARY');
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v9 requires exact nullable fields and refuses unknown or wrongly scoped close failures', async t => {
+  const invalid = [undefined, DIAGNOSTICS, diagnosticV7(), diagnosticV8()];
+  for (const reason of ['PRIVATE-CLOSE-CANARY', 'unspecified', '', 1, false, {}, []]) invalid.push(diagnosticV9(reason));
+  for (const field of ['tls_close_failure', 'append_timing']) {
+    const bad = diagnosticV9(); delete bad.failures[0].agent_outcome[field]; invalid.push(bad);
+  }
+  for (const [field, value] of [['phase', 'provider_tls_close'], ['phase', 'remote_receipt_read'],
+    ['category', 'io'], ['category', 'cancelled'], ['category', 'timeout'], ['deadline_scope', 'operation']]) {
+    const bad = diagnosticV9('read_io'); bad.failures[0].agent_outcome.detail[field] = value; invalid.push(bad);
+  }
+  for (const status of ['missing', 'pending', 'expired', 'query_failed', 'query_timeout']) {
+    const bad = diagnosticV9('read_io'); Object.assign(bad.failures[0].agent_outcome, { status, detail: null }); invalid.push(bad);
+  }
+  const raw = diagnosticV9(); raw.failures[0].agent_outcome.raw = 'PRIVATE-CLOSE-CANARY'; invalid.push(raw);
+  const timing = diagnosticV9('read_io'); timing.failures[0].agent_outcome.append_timing = {
+    before_payload: 'under_1s', in_payload_write_flush: 'under_1s', in_receipt_read: 'under_1s',
+  }; invalid.push(timing);
+  for (const version of [0, 8, 10, '9', true]) invalid.push({ ...diagnosticV9(), version });
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics, { tlsCloseDiagnosticsV9: true });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report', JSON.stringify(diagnostics));
+    assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true);
+    assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-CLOSE-CANARY'));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v9 preserves nullable outcomes, existing flow bounds and APPEND timing', async t => {
+  const timing = { before_payload: 'under_1s', in_payload_write_flush: '1_to_5s', in_receipt_read: '90_to_120s' };
+  const cases = [{ ...diagnosticV8(flowDetail('helper_acquire', 'helper_kernel', 8)), version: 9 },
+    { ...diagnosticV8(), version: 9 }];
+  for (const outcome of [null, ...['missing', 'pending', 'expired', 'query_failed', 'query_timeout'].map(status => ({
+    status, detail: null, append_timing: null, tls_close_failure: null,
+  }))]) {
+    const diagnostics = diagnosticV9(); diagnostics.failures[0].agent_outcome = outcome; cases.push(diagnostics);
+  }
+  const append = { ...diagnosticV7(timing), version: 9 };
+  append.failures[0].agent_outcome.tls_close_failure = null; cases.push(append);
+  for (const diagnostics of cases) {
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, { tlsCloseDiagnosticsV9: true }));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+  }
+  const invalidTiming = structuredClone(append); invalidTiming.failures[0].agent_outcome.append_timing.in_receipt_read = 'PRIVATE-CLOSE-CANARY';
+  const invalid = [invalidTiming, { ...diagnosticV8(flowDetail('retirement_drain', 'helper_not_found')), version: 9 },
+    { ...diagnosticV8({ ...flowDetail(), last: { stage: 'source_port', reason: 'entropy' } }), version: 9 }];
+  for (const rounds of [0, 9, true, '1']) invalid.push({ ...diagnosticV8({ ...flowDetail(), rounds }), version: 9 });
+  const missingFlow = { ...diagnosticV8(), version: 9 }; delete missingFlow.failures[0].agent_detail.flow_acquire; invalid.push(missingFlow);
+  for (const diagnostics of invalid) {
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, { tlsCloseDiagnosticsV9: true }));
+    assert.equal(result.code, 'invalid_core_report');
+    assert.equal(result.storage, null);
+  }
+});
+
+test('Cloud v9 config is strict, exclusive and does not add its flag to historical modes', async t => {
+  for (const diagnostics of [DIAGNOSTICS, { ...diagnosticV4(), version: 6 }, diagnosticV7(), diagnosticV8()]) {
+    const config = { tlsCloseDiagnosticsV9: false,
+      ...(diagnostics.version === 7 ? { appendDiagnosticsV7: true } : {}),
+      ...(diagnostics.version === 8 ? { flowAcquireDiagnosticsV8: true } : {}) };
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, config));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+    const unsolicited = await storePrivateFile('deposit', await fixture(t, diagnosticV9(), config));
+    assert.equal(unsolicited.code, 'invalid_core_report');
+    if (diagnostics.version >= 4) {
+      const wrong = { ...diagnosticV9(), version: diagnostics.version };
+      assert.equal((await storePrivateFile('deposit', await fixture(t, wrong, config))).code, 'invalid_core_report');
+    }
+  }
+  for (const value of [null, 'true', 1, 0, [], {}]) {
+    await assert.rejects(storePrivateFile('deposit', await fixture(t, diagnosticV9(), { tlsCloseDiagnosticsV9: value })),
+      { code: 'invalid_configuration' });
+  }
+  for (const other of ['appendDiagnosticsV7', 'flowAcquireDiagnosticsV8']) {
+    await assert.rejects(storePrivateFile('deposit', await fixture(t, diagnosticV9(), { tlsCloseDiagnosticsV9: true, [other]: true })),
+      { code: 'invalid_configuration' });
+  }
 });
 
 test('Cloud vendored helpers retain exact local provenance sizes and digests', async () => {

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "https://github.com/VOLPAROSSA/volparossa-image",
-  "revision": "9694a2b9dcb40aceefd78dbc0ab34303071a0ffd",
+  "revision": "1e812ec6424a539a336d230b99ae1c11a494ca29",
   "license": "GPL-3.0-only",
   "local_modifications": false,
   "files": {
@@ -12,8 +12,8 @@
     },
     "src/core-storage.mjs": {
       "local": "vendor/volparossa-image/core-storage.mjs",
-      "bytes": 52061,
-      "sha256": "fa399805db0323163bec469d222fd4236efaa228f40625845e76d3ec8bac0ac8"
+      "bytes": 53352,
+      "sha256": "551a92c179f257dd90b6bf2d0c1d147d517bf8bb71e070094ec8b1464fcf4e2e"
     },
     "LICENSE": {
       "local": "vendor/volparossa-image/LICENSE",
