@@ -12,11 +12,14 @@
   permissions and client compatibility separately; document missing behavior.
 - New storage follows the core's single redundancy policy. Preserve existing
   archives and charges; never delete the last recoverable copy during migration.
-- Use small, executable slices and targeted functional checks. Prove origin-off
-  access with the real supported client before claiming it works without the
-  original server. Never replace such evidence with a mock-only claim.
-- Use synthetic data for tests. Do not change host networking, install global
-  software, download executable dependencies automatically, or read real user
-  accounts/files without a specific request.
+- Build coherent, executable end-to-end integrations with targeted functional
+  checks. Prove origin-off access with the real supported client before claiming
+  it works without the original server. Never replace such evidence with a mock-only claim.
+- Do not change host networking. Use synthetic data for tests; reading real user
+  accounts/files requires a specific request. Task-scoped, pinned and verified
+  workspace-local acquisition, builds and isolated tests are normal authorized
+  development steps, with no separate approval for each download. Do not use
+  untrusted executable downloads. Global installation or permanent changes
+  outside the workspace require explicit user approval.
 - Pin upstream source and preserve component licenses. Original integration
   code is GPL-3.0-only; OpenCloud server and web components have distinct licenses.

@@ -2,7 +2,7 @@
 // Small asset-contract tests; synthetic build receipts are not source/UI proof.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, open, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -76,5 +76,37 @@ test('changed assets and mismatched build evidence are refused', async () => {
     f.report.build_network = true;
     await writeFile(join(f.directory, 'BUILD_REPORT.json'), JSON.stringify(f.report));
     await assert.rejects(loadRecoveryWebAssets({ distDirectory: f.directory, origin: 'http://127.0.0.1:45678' }));
+  } finally { await f.close(); }
+});
+
+
+test('asset ingestion keeps the descriptor validated before pathname replacement', async t => {
+  const f = await fixture(), file = join(f.directory, 'index.html');
+  const probe = await open(file, 'r'), original = await probe.readFile();
+  const identity = (await probe.stat()).ino, prototype = Object.getPrototypeOf(probe);
+  await probe.close();
+  const stat = prototype.stat; let changed = false, checked;
+  t.mock.method(prototype, 'stat', async function (...args) {
+    const info = await Reflect.apply(stat, this, args);
+    if (!changed && info.ino === identity) {
+      changed = true; checked = this;
+      await rename(file, join(f.directory, 'original.html'));
+      await writeFile(file, 'untrusted replacement');
+    }
+    return info;
+  });
+  try {
+    const assets = await loadRecoveryWebAssets({distDirectory: f.directory, origin: 'http://127.0.0.1:45678'});
+    assert.equal(changed, true); assert.deepEqual(assets.get('/index.html').data, original);
+    assert.equal(checked.fd, -1);
+  } finally { t.mock.restoreAll(); await f.close(); }
+});
+
+test('asset ingestion rejects symlinked assets without serving target bytes', async () => {
+  const f = await fixture(), file = join(f.directory, 'index.html');
+  try {
+    await rename(file, join(f.directory, 'target.html'));
+    await symlink(join(f.directory, 'target.html'), file);
+    await assert.rejects(loadRecoveryWebAssets({distDirectory: f.directory, origin: 'http://127.0.0.1:45678'}));
   } finally { await f.close(); }
 });
