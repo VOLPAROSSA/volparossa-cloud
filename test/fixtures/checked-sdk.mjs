@@ -2,12 +2,31 @@
 // Verify the complete explicitly staged published SDK before importing it.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PIN_PATH = join(ROOT, 'third_party/opencloud-web-sdk.json');
+
+async function readSDKFile(path, expected) {
+  assert.equal(await realpath(path), path);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await handle.stat();
+    assert.ok(info.isFile() && Number.isSafeInteger(expected.bytes) && expected.bytes >= 0 && expected.bytes <= 32 * 1024 ** 2 && info.size === expected.bytes);
+    const bytes = Buffer.alloc(info.size + 1); let size = 0;
+    while (size < bytes.length) {
+      const { bytesRead } = await handle.read(bytes, size, bytes.length - size, size);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    const after = await handle.stat();
+    assert.ok(size === info.size && ['size', 'mtimeMs', 'mode', 'uid', 'gid'].every(key => info[key] === after[key]));
+    return bytes.subarray(0, size);
+  } finally { await handle.close(); }
+}
 
 export async function checkedSDK(directory) {
   assert.equal(await realpath(directory), directory);
@@ -22,9 +41,7 @@ export async function checkedSDK(directory) {
     assert.match(name, /^package\//u);
     assert.ok(!name.split('/').some(part => part === '.' || part === '..'));
     const path = join(directory, name);
-    assert.equal(await realpath(path), path);
-    assert.equal((await lstat(path)).isFile(), true);
-    const bytes = await readFile(path);
+    const bytes = await readSDKFile(path, expected);
     assert.equal(bytes.length, expected.bytes);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), expected.sha256);
   }
