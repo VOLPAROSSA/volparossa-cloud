@@ -2,11 +2,18 @@
 
 # Project VOLPAROSSA Cloud
 
-**Your files, supported by a cooperative network.**
+**Your files should not depend on keeping your own server switched on.**
 
-An OpenCloud integration for Project VOLPAROSSA's **DICN — Decentralized
-Intelligent Cooperative Network**. The goal is to keep your files useful and
-reachable without requiring your own OpenCloud server to stay switched on.
+Keep the familiar OpenCloud file interface while working toward storage shared
+across participants. VOLPAROSSA Cloud connects OpenCloud to the
+[VOLPAROSSA core](https://github.com/VOLPAROSSA/volparossa), which handles encrypted
+fragments and recovery rather than asking each application to build its own
+storage network.
+
+The goal covers folders, access rights and synchronization as well as file bytes.
+Contributors can help join [owner-private uploads](docs/OWNER_UPLOADS.md) and
+recovery to that complete experience; persistent repair, renewal and deletion
+across the current consumer lifecycle are still unfinished.
 
 **Development status:** private file import, browsing, new-file upload and
 recovery now pass scoped trials through the **original OpenCloud Files interface
