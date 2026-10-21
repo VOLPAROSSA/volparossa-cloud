@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "https://github.com/VOLPAROSSA/volparossa-image",
-  "revision": "9e925bdb1bde4d7686868e7aa826fd8144aca91e",
+  "revision": "78cc1d6cc7012ac64bbd07408990b63ed025d127",
   "license": "GPL-3.0-only",
   "local_modifications": false,
   "files": {
@@ -12,8 +12,8 @@
     },
     "src/core-storage.mjs": {
       "local": "vendor/volparossa-image/core-storage.mjs",
-      "bytes": 20915,
-      "sha256": "d274c294a4f7c500aac552629997487c79e67faaa89dddd1383309d7e58273b0"
+      "bytes": 35562,
+      "sha256": "e03b03de81678e3b097212d3f3b679caf6ae155493420df1f05c0d461c30d413"
     },
     "LICENSE": {
       "local": "vendor/volparossa-image/LICENSE",
@@ -23,7 +23,8 @@
   },
   "reused_contracts": [
     "Owner-private GnuPG supervised agent and standard OpenPGP AES256/MDC process",
-    "Core-owned fragment placement and uniform redundancy; additive v2 repair accounting"
+    "Core-owned fragment placement and uniform redundancy; additive v2 repair accounting",
+    "Explicit mutually exclusive v7-v10 deposit diagnostics; absent/false selectors preserve default results"
   ],
   "not_claimed": ["Immich snapshot compatibility", "automatic dependency installation", "actual peer storage proof"]
 }
