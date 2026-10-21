@@ -90,7 +90,7 @@ async function fixture(t, configChanges = {}, operation = 'deposit') {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[4] !== ${JSON.stringify(operation)}) process.exit(17);
-fs.appendFileSync(${JSON.stringify(argv)}, JSON.stringify(args) + '\n', { mode: 0o600 });
+fs.appendFileSync(${JSON.stringify(argv)}, JSON.stringify(args) + '\\n', { mode: 0o600 });
 const reply = JSON.parse(fs.readFileSync(${JSON.stringify(reply)}, 'utf8'));
 process.stdout.write(reply.text === undefined ? JSON.stringify(reply.raw) : reply.text);
 process.exitCode = reply.code;
@@ -211,8 +211,18 @@ test('Cloud create keeps every configured selector inactive and ignores malforme
 });
 
 test('Cloud selected deposits require exact version and closed fields without weakening custody or errors', async t => {
-  for (const [key, , version] of SELECTORS) {
+  for (const [key, flag, version] of SELECTORS) {
     const value = await fixture(t, { [key]: true });
+    // Establish that this fixture can actually return a valid selected report;
+    // a broken child must not make every negative case pass as a generic error.
+    const valid = diagnostic(version);
+    await value.reply({ raw: rawReport('deposit', valid), code: 1 });
+    const positive = await storePrivateFile('deposit', value);
+    assert.equal(positive.code, 'retained_operation_incomplete');
+    assert.deepEqual(positive.storage.deposit_diagnostics, valid);
+    privateResult(positive, value);
+    let childCalls = 1;
+    assert.equal((await value.arguments()).length, childCalls);
     const bad = diagnostic(version); bad.failures[0].raw = 'PRIVATE-DIAGNOSTIC-CANARY';
     const invalid = [undefined, null, bad, { ...diagnostic(version), version: 1 },
       { ...diagnostic(version), version: version === 10 ? 9 : 10 }, { ...diagnostic(version), version: 11 }];
@@ -220,6 +230,9 @@ test('Cloud selected deposits require exact version and closed fields without we
       await value.reply({ raw: rawReport('deposit', current), code: 1 });
       const result = await storePrivateFile('deposit', value);
       assert.equal(result.code, 'invalid_core_report'); assert.equal(result.storage, null);
+      const calls = await value.arguments();
+      assert.equal(calls.length, ++childCalls);
+      assert.equal(calls.at(-1)[7], flag);
       privateResult(result, value);
     }
     assert.equal((await lstat(value.state)).isDirectory(), true);
