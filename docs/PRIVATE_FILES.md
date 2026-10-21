@@ -141,6 +141,54 @@ journals, identities and grants must also remain available: the encrypted file
 alone does not solve account or owner-state recovery. Lease renewal, repair and
 retirement remain existing core operations, not a new Cloud background service.
 
+## Optional deposit diagnostics
+
+The same private core JSON may explicitly select one diagnostic version:
+
+| Optional boolean | Deposit flag and exact required version |
+| --- | --- |
+| `appendDiagnosticsV7` | `--append-diagnostics-v7`, v7 |
+| `flowAcquireDiagnosticsV8` | `--flow-acquire-diagnostics-v8`, v8 |
+| `tlsCloseDiagnosticsV9` | `--tls-close-diagnostics-v9`, v9 |
+| `challengeReadDiagnosticsV10` | `--challenge-read-diagnostics-v10`, v10 |
+
+All four default to false. Supplied values must be booleans and at most one may
+be true. Only deposit sends a flag and requires the selected closed report.
+Missing, downgraded, future or malformed selected diagnostics fail closed as
+`invalid_core_report`. Payload version markers do not authorize projection.
+There is no generic v1–v6 opt-in; those observations are inherited fields of
+selected v7–v10 reports.
+
+Absent or all-false selectors preserve the original Cloud adapter's argv and
+complete results, ignoring unsolicited diagnostics even when malformed or future.
+The selectors remain inactive for every other core operation, including create
+and restore. No Cloud command-line diagnostic switch is added: selection comes
+only from the caller's private core configuration.
+
+Selected results add a frozen `storage.deposit_diagnostics` summary. It retains
+closed failure observations bound to the validated fragment/copy geometry, with
+bounded omissions and no raw paths, provider keys, stderr or input bytes. It does
+not replace the original error, ciphertext validation, conservative accounting,
+completion status or cleanup evidence. A null returned wire outcome means only
+that none was observed; read stage alone identifies no remote cause. In v10,
+`before_challenge` and `in_challenge` remain whole-boundary timing buckets.
+Deadlines, retries, owner publication, recovery and pending-upload behavior remain
+unchanged. Retained maintenance branches remain separate pending integration.
+
+The vendored SDK is byte-identical to accepted Image
+`78cc1d6cc7012ac64bbd07408990b63ed025d127`, with all three source files bound by
+`third_party/volparossa-image-source.json`. Its helper and license bytes are unchanged.
+The focused `test/storage-deposit-diagnostics.test.mjs` is designed to exercise
+the actual Cloud consumer, default SDK and joined synthetic Node child. It compares
+full default results and argv against a readable test-only copy of the original
+Cloud-main SDK at `bdc9c914f4687f25396e23f322d5fa27e183ce8a`, 20,915 bytes,
+SHA-256 `d274c294a4f7c500aac552629997487c79e67faaa89dddd1383309d7e58273b0`,
+verified before use. The child emits fabricated core reports over opaque bytes;
+these contracts do not run GPG, real storage peers or OpenCloud and do not prove
+remote cleanup or resolution of a historical trial failure. The existing Quality
+workflow runs them with `node --test test/*.test.mjs`; this new Cloud composition
+still requires its hosted result.
+
 ## Evidence and remaining work
 
 `test/private-file.test.mjs` executes real GnuPG encryption and decryption, a
