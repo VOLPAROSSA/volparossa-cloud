@@ -8,13 +8,15 @@ import { openPrivateCatalog } from '../src/private-catalog.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
 import { loadRecoveryWebAssets } from './recovery-web-assets.mjs';
 import { openOwnerUploads } from '../src/owner-uploads.mjs';
+import { openStorageMaintenance, validateStorageMaintenance } from '../src/storage-maintenance.mjs';
 
 export class CloudServeError extends Error {
   constructor(code) { super(code); this.name = 'CloudServeError'; this.code = code; }
 }
 const fail = () => { throw new CloudServeError('INVALID_PRIVATE_READ_CONFIGURATION'); };
 const FIELDS = new Set(['version', 'catalog', 'workDirectory', 'bearerToken', 'port',
-  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes', 'webDist', 'ownerUploads']);
+  'allowedOrigins', 'maxOpenBytes', 'maxConcurrent', 'requestTimeoutMs', 'maxRangeBytes', 'webDist', 'ownerUploads',
+  'storageMaintenance']);
 const REQUIRED = ['version', 'catalog', 'workDirectory', 'bearerToken'];
 function integer(value, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) fail();
@@ -55,6 +57,8 @@ export function validateConfiguration(value) {
     bearerToken: value.bearerToken, allowedOrigins: Object.freeze([...allowedOrigins]),
     ...(value.webDist !== undefined ? { webDist: value.webDist } : {}),
     ...(value.ownerUploads !== undefined ? { ownerUploads: Object.freeze({ ...value.ownerUploads }) } : {}),
+    ...(value.storageMaintenance !== undefined
+      ? { storageMaintenance: validateStorageMaintenance(value.storageMaintenance) } : {}),
     port: integer(value.port ?? 0, 0, 65535),
     maxOpenBytes: integer(value.maxOpenBytes ?? 256 * 1024 ** 2, 1, 8 * 1024 ** 3),
     maxConcurrent: integer(value.maxConcurrent ?? 2, 1, 16),
@@ -73,6 +77,7 @@ export function parseArguments(args) {
 
 export async function startCloudService(value, {
   signal, openCatalog = openPrivateCatalog, startServer = startPrivateDavServer, openUploads = openOwnerUploads,
+  openMaintenance = openStorageMaintenance,
 } = {}) {
   // The optional factories are module test seams, never executable configuration.
   const config = validateConfiguration(value);
@@ -82,22 +87,30 @@ export async function startCloudService(value, {
   if (signal?.aborted) abort();
   let backend;
   let server;
+  let maintenance;
   let closing;
   const close = () => {
     if (!closing) closing = (async () => {
       cancel.abort();
       signal?.removeEventListener('abort', abort);
       try { await server?.close(); }
-      finally { await backend?.close(); }
+      finally {
+        try { await backend?.close(); }
+        finally { await maintenance?.close(); }
+      }
     })();
     return closing;
   };
   try {
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
+    if (config.storageMaintenance) {
+      maintenance = await openMaintenance(config.storageMaintenance, { signal: cancel.signal });
+    }
+    const storageContext = maintenance ? { storageFactory: maintenance.storageFactory } : {};
     backend = await openCatalog({ catalog: config.catalog, workDirectory: config.workDirectory,
-      maxOpenBytes: config.maxOpenBytes, maxOpenFiles: config.maxConcurrent }, { signal: cancel.signal });
+      maxOpenBytes: config.maxOpenBytes, maxOpenFiles: config.maxConcurrent }, { signal: cancel.signal, ...storageContext });
     if (config.ownerUploads) backend = await openUploads({ ...config.ownerUploads, workDirectory: config.workDirectory,
-      maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal });
+      maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal, ...storageContext });
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     server = await startServer({ backend, bearerToken: config.bearerToken, port: config.port,
       allowedOrigins: config.allowedOrigins, maxConcurrent: config.maxConcurrent,
@@ -108,7 +121,8 @@ export async function startCloudService(value, {
       } } : {}),
     });
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
-    return Object.freeze({ origin: server.origin, baseURL: server.baseURL, readOnly: !config.ownerUploads, close });
+    return Object.freeze({ origin: server.origin, baseURL: server.baseURL, readOnly: !config.ownerUploads,
+      maintenanceStatus: () => maintenance ? maintenance.status() : Promise.resolve(null), close });
   } catch (error) { await close(); throw error; }
 }
 

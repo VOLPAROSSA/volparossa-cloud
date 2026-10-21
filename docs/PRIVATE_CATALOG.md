@@ -89,6 +89,48 @@ a failure on later `close()` calls rather than being forgotten after an open
 has rejected. A failed cleanup can leave a private staging directory that must
 be inspected and removed by its owner; the service never calls that success.
 
+## Sharing the owner's maintenance process
+
+The developing owner service accepts an optional `storageMaintenance` list in its
+private configuration. Each of its 1–8 entries references an existing storage
+configuration and a previously signed core enrollment:
+
+```json
+{
+  "storageMaintenance": [
+    {
+      "config": "/owner/private/file-storage.json",
+      "enrollment": "/owner/private/file-maintenance"
+    }
+  ]
+}
+```
+
+This is a fragment to add to the normal service configuration, not a complete
+configuration. Paths must be canonical, absolute and distinct. The configuration
+path must match the corresponding catalog/upload storage reference exactly.
+The core maintenance CLI and the current Image adapter are required; an older
+core is not a functional substitute.
+
+The service opens one adapter for each explicitly listed archive. Catalog reads
+and uploads referencing that configuration use the **same instance**. Before
+foreground storage work, the shared adapter stops and joins its maintenance child;
+only then does it acquire the archive lock. Successful non-delete operations can
+resume the same still-valid enrollment. Cloud adds no repair scheduler, capacity
+ledger, grant creation or automatic enrollment when a file is read or uploaded.
+
+Service shutdown closes every owned adapter, even if another close fails.
+Unconfirmed cleanup remains a visible failure. `maintenanceStatus()` on the
+programmatic service handle returns closed checkpoints and owned-process status,
+not file names, keys or raw core logs. It is not exposed as a new public HTTP route.
+Without `storageMaintenance`, ordinary service behavior is unchanged.
+
+These bindings have adapter/contract lifecycle tests, not yet a combined
+protected-peer Cloud maintenance proof. The service supervises processes while
+it is running; it does not install an always-on owner service. Automatic enrollment
+of new uploads, grant refresh, second-device authority recovery and reciprocal
+capacity management remain unfinished.
+
 ## Evidence and remaining work
 
 The catalog tests use actual synthetic DAV imports, actual GPG encryption and
