@@ -68,6 +68,8 @@ if (process.argv.filter(value => value === '--flow-acquire-diagnostics-v8').leng
 if (${configChanges.flowAcquireDiagnosticsV8 === true} && process.argv[9] !== '--flow-acquire-diagnostics-v8') process.exit(21);
 if (process.argv.filter(value => value === '--tls-close-diagnostics-v9').length !== ${configChanges.tlsCloseDiagnosticsV9 === true ? 1 : 0}) process.exit(22);
 if (${configChanges.tlsCloseDiagnosticsV9 === true} && process.argv[9] !== '--tls-close-diagnostics-v9') process.exit(23);
+if (process.argv.filter(value => value === '--challenge-read-diagnostics-v10').length !== ${configChanges.challengeReadDiagnosticsV10 === true ? 1 : 0}) process.exit(24);
+if (${configChanges.challengeReadDiagnosticsV10 === true} && process.argv[9] !== '--challenge-read-diagnostics-v10') process.exit(25);
 process.stdout.write(${JSON.stringify(JSON.stringify(rawReport(diagnostics)))});
 process.exitCode = 1;
 `, { mode: 0o700 });
@@ -728,5 +730,67 @@ test('Cloud vendored helpers retain exact local provenance sizes and digests', a
     const bytes = await readFile(new URL(`../${entry.local}`, import.meta.url));
     assert.equal(bytes.length, entry.bytes);
     assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
+  }
+});
+
+function diagnosticV10(read = { step: 'body_read', returned_outcome: null }) {
+  return { version: 10, omitted_failures: 0, failures: [{ fragment_index: 2, copy_index: 1,
+    operation: 'append', stage: 'agent_ready', category: 'agent_rejected', agent_code: 'CONTENT_UNAVAILABLE',
+    agent_outcome: null, agent_detail: { stage: 'challenge', deadline_scope: 'operation', tls_failure: null,
+      stream_failure: null, flow_acquire: null, challenge: { phase: 'challenge_read_verify',
+        before_challenge: '1_to_5s', in_challenge: '90_to_120s', read } } }] };
+}
+
+test('Cloud v10 preserves finite read observations, null meaning and exact failed attempt without leaking inputs', async t => {
+  const allowed = { length_read: [null, 'io_eof', 'io_other', 'invalid', 'wire_timeout'],
+    body_read: [null, 'io_eof', 'io_other', 'wire_timeout'], verification: [null, 'invalid', 'verification_rejected'] };
+  for (const step of Object.keys(allowed)) for (const returned_outcome of [null, 'io_eof', 'io_other', 'invalid', 'verification_rejected', 'wire_timeout']) {
+    const diagnostics = diagnosticV10({ step, returned_outcome });
+    const value = await fixture(t, diagnostics, { challengeReadDiagnosticsV10: true });
+    const result = await storePrivateFile('deposit', value);
+    if (allowed[step].includes(returned_outcome)) {
+      assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+      assert.equal(result.status, 'incomplete'); assert.equal(result.local_process_joined, true);
+      assert.equal(result.remote_cleanup_confirmed, false);
+    } else { assert.equal(result.code, 'invalid_core_report'); assert.equal(result.storage, null); }
+    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+  for (const diagnostics of [diagnosticV10(null), { ...diagnosticV9('read_io'), version: 10 }]) {
+    const result = await storePrivateFile('deposit', await fixture(t, diagnostics, { challengeReadDiagnosticsV10: true }));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
+  }
+});
+
+test('Cloud v10 config is strictly opt-in, mutually exclusive and retains legacy v9 selection', async t => {
+  for (const value of [null, 1, 0, 'true', [], {}]) {
+    await assert.rejects(storePrivateFile('deposit', await fixture(t, diagnosticV10(), { challengeReadDiagnosticsV10: value })),
+      { code: 'invalid_configuration' });
+  }
+  for (const other of ['appendDiagnosticsV7', 'flowAcquireDiagnosticsV8', 'tlsCloseDiagnosticsV9']) {
+    await assert.rejects(storePrivateFile('deposit', await fixture(t, diagnosticV10(), { challengeReadDiagnosticsV10: true, [other]: true })),
+      { code: 'invalid_configuration' });
+  }
+  for (const config of [{ tlsCloseDiagnosticsV9: true }, { tlsCloseDiagnosticsV9: true, challengeReadDiagnosticsV10: false }]) {
+    const result = await storePrivateFile('deposit', await fixture(t, diagnosticV9(), config));
+    assert.deepEqual(result.storage.deposit_diagnostics, diagnosticV9());
+    const unsolicited = await storePrivateFile('deposit', await fixture(t, diagnosticV10(), config));
+    assert.equal(unsolicited.code, 'invalid_core_report');
+  }
+});
+
+test('Cloud v10 rejects malformed, wrongly scoped and downgraded reports without changing ciphertext', async t => {
+  const invalid = [diagnosticV9(), diagnosticV10({ step: 'PRIVATE-READ-CANARY', returned_outcome: null }),
+    diagnosticV10({ step: 'body_read' }), diagnosticV10({ step: 'body_read', returned_outcome: true }),
+    diagnosticV10({ step: 'body_read', returned_outcome: null, raw: 'PRIVATE-READ-CANARY' })];
+  const phase = diagnosticV10(); phase.failures[0].agent_detail.challenge.phase = 'grant_write_flush'; invalid.push(phase);
+  const missing = diagnosticV10(); delete missing.failures[0].agent_detail.challenge.read; invalid.push(missing);
+  for (const diagnostics of invalid) {
+    const value = await fixture(t, diagnostics, { challengeReadDiagnosticsV10: true });
+    const result = await storePrivateFile('deposit', value);
+    assert.equal(result.code, 'invalid_core_report'); assert.equal(result.storage, null);
+    assert.equal(result.local_process_joined, true); assert.equal(result.remote_cleanup_confirmed, false);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-READ-CANARY'));
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
   }
 });
