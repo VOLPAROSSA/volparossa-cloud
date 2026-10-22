@@ -1,6 +1,6 @@
 ![VOLPAROSSA Cloud banner with a sleeping fox among golden clouds](docs/assets/banner-volparossa-cloud.png)
 
-# Project VOLPAROSSA Cloud
+# VOLPAROSSA Cloud
 
 **Your files should not depend on keeping your own server switched on.**
 
