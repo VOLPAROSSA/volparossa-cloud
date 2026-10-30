@@ -1,0 +1,78 @@
+[
+  {
+    "id": "hero",
+    "refs": [
+      "02-cloud-crystal-original.png"
+    ],
+    "transparent": false,
+    "prompt": "Create a clean cinematic website HERO ARTWORK, landscape 1536 x 1024. Use ONLY the FIRST (top) section of the supplied Crystal Archive reference for the art direction. Recreate its majestic natural-proportioned fox sculpted from translucent glowing amber glass facets, whole body sitting elegantly in the RIGHT half, ears, paws and magnificent sweeping faceted tail all fully inside the frame. Fox looks left, strong realistic fox anatomy, sophisticated fine glass craftsmanship, very dimensional glass with golden refracting edges and scattered leaf-like glass facets extending toward center. Near-black deep burgundy background, restrained tiny golden light points and a few delicate circular celestial engraving arcs behind fox. LEFT 42% broadly dark quiet negative space for later HTML copy; do not fill this area with crystals. Leave dark negative space above the fox for later website navigation. Match the selected reference closely: sumptuous warm amber clear glass, rich dark burgundy shadows, luminous golden delicate refractions. No text, no letters, no title, no words, no logos, no buttons, no UI, no screenshot, no borders, no webpage. Avoid low-poly cartoon, cryptocurrency coins, aggressive armor, blue light. This must be one pristine full-bleed illustration, NOT a multi-section web design.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "hero.png",
+    "references": [
+      "02-cloud-crystal-original.png"
+    ]
+  },
+  {
+    "id": "courtyards",
+    "refs": [
+      "03-cloud-courtyards-SECTION-3-ONLY.png"
+    ],
+    "transparent": false,
+    "prompt": "Create ONE clean wide cinematic artwork, landscape 1536 x 1024, closely reproducing the THIRD SECTION only of the supplied Connected Courtyards reference (the illustrated town under 'Encrypted here. Stored together.'). Ignore completely the hero, OpenCloud UI, status and footer. Old warm sandstone hillside town at amber sunset with atmospheric distant mountains, layered leafy courtyards, a large old arched stone footbridge across the middle and lit windows. In LEFT foreground a person in warm burgundy clothing sits at a small desk under an ivy covered stone arch with a laptop, in RIGHT foreground two SEPARATE warmly lit arched rooms above each other have two people at their own workspaces. Three equal participants, not a central hub. Fine delicate warm GOLD arcs connect a few workspaces, bright restrained glints at endpoints. Keep desktop screens dark and illegible. Luxurious high-detail fantasy realism, rich natural materials, golden sunlight, warm burgundy shadows. Preserve the wide cinematic composition of that exact third reference section. No words, no text, no logos, no diagram labels, no buttons, no UI overlays, no documents flying, no central tower controlling links. It is one full-bleed scenery image, NOT a webpage.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "courtyards.png",
+    "references": [
+      "03-cloud-courtyards-SECTION-3-ONLY.png"
+    ]
+  },
+  {
+    "id": "valley",
+    "refs": [
+      "01-cloud-crystal-refined-SELECTED.png"
+    ],
+    "transparent": false,
+    "prompt": "Create ONE clean wide cinematic closing artwork, landscape 1536 x 1024, matching the LAST image section of the supplied Crystal Archive webpage reference. Calm glowing GOLDEN VALLEY at sunset, distant imaginative sandstone town and towers, a river threading through warm mountains with a delicate stone arched bridge, rich deep burgundy shadowed rocks. A FEW large luminous translucent faceted amber CRYSTAL formations in the RIGHT foreground, warm golden edges and fine light refractions, exactly the reference crystal world. Leave left 45% foreground in very dark calm shadow for real HTML text later. No fox, no boats, no harbour. Sophisticated cinematic fantasy realism with strong atmospheric depth. No words, letters, titles, logos, UI, borders, labels, buttons or website. One full-bleed illustration ONLY.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "valley.png",
+    "references": [
+      "01-cloud-crystal-refined-SELECTED.png"
+    ]
+  },
+  {
+    "id": "product-crystal",
+    "refs": [
+      "02-cloud-crystal-original.png"
+    ],
+    "transparent": true,
+    "prompt": "Create ONE isolated tall elegant translucent amber glass crystal from the RIGHT SIDE of the SECOND section of the supplied Crystal Archive reference (beside OpenCloud interface). Real transparent background, not white and not black. A large faceted narrow upright amber crystal with delicate warm golden edges, tiny imagined golden valley and sandstone city reflected within the glass. Refined asymmetrical shard silhouette, rich luminous light refraction, subtle natural shadow. Whole object visible with generous surrounding transparent margins. No base, no other objects, no rocks beyond crystal, no words, no logos, no symbols, no interface, no text. This is an isolated decorative illustration asset, not a website screenshot. Detailed dimensional fine glass like the reference.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "product-crystal.png",
+    "references": [
+      "02-cloud-crystal-original.png"
+    ]
+  },
+  {
+    "id": "encrypted",
+    "prompt": "One isolated translucent AMBER GLASS OBJECT shaped like a refined upright sheet/document with a gently cut top-right corner, front three-quarter view. Fine faceted edges, dark opaque burgundy/amber interior etched with completely ABSTRACT tiny triangulated patterns, luminous warm gold rim light and dimensional crystalline reflections. This is symbolic ENCRYPTED data: absolutely no readable writing, numbers, symbols, pictures, documents inside it, or personal contents. No padlock (a precise SVG lock will be added later). Whole single glass object centrally composed with generous empty margin. Sophisticated glass craftsmanship matching the gold crystals in the supplied reference's THIRD section. Real TRANSPARENT background, no backdrop, no floor, no checkerboard pattern. No words, text, labels, arrows, UI, logos. One standalone object asset only, not webpage or diagram.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "encrypted.png",
+    "references": [
+      "01-cloud-crystal-refined-SELECTED.png"
+    ]
+  },
+  {
+    "id": "fragments",
+    "prompt": "A single small cluster of 5 separated translucent AMBER GLASS FACETS floating at different angles. Fine faceted golden edges, dark burgundy/amber interiors etched with completely ABSTRACT tiny triangulated patterns, luminous warm gold rim light, dimensional crystalline reflections. Cohesive family of refined shards matching encrypted glass object in the supplied reference's THIRD section. All shards completely separate with gaps and inside the frame, arranged in a broad balanced cluster. These represent encrypted data, no readable writing, numbers, symbols, pictures or recognizable contents inside glass. Real TRANSPARENT background, no floor, backdrop or checkerboard pattern. No words, labels, arrows, UI, logos or padlocks. One standalone decorative asset, not a diagram or webpage.",
+    "generated_on": "2026-10-30",
+    "tool": "OpenAI image generation",
+    "master": "fragments.png",
+    "references": [
+      "01-cloud-crystal-refined-SELECTED.png"
+    ]
+  }
+]

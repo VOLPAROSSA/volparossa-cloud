@@ -1,0 +1,26 @@
+{
+  "title": "VOLPAROSSA Cloud — A new horizon for your files",
+  "description": "The familiar OpenCloud experience, connected to encrypted fragment storage through VOLPAROSSA Core. Explore owner-side encryption, shared storage and local recovery.",
+  "canonical": "https://volparossa.org/volparossa-cloud/",
+  "base_path": "/volparossa-cloud/",
+  "repository": "https://github.com/VOLPAROSSA/volparossa-cloud",
+  "documentation": "https://volparossa.org/docs/",
+  "core": "https://volparossa.org/volparossa/",
+  "reviewed_on": "2026-10-30",
+  "source_commit": "468e29f3ff1e183bfb67830e9fdfb893807e8f9b",
+  "theme_commit": "251b8f385091d5f490d509fcadb94ca060ac94b6",
+  "evidence": "https://github.com/VOLPAROSSA/volparossa-cloud/blob/main/docs/OWNER_UPLOADS.md#evidence-and-remaining-scope",
+  "trial": {
+    "url": "https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756",
+    "cloud_commit": "ffdcfaa15cdd2a029dae545904b0a58603da4e17",
+    "core_commit": "929c2ff909f4e9704046459e0434006397dc9110",
+    "status": "Previously documented scoped trial; not rerun for this website."
+  },
+  "screenshot": {
+    "kind": "upstream-example",
+    "caption": "OpenCloud interface example. The VOLPAROSSA integration is in development.",
+    "source": "https://github.com/opencloud-eu/docs/blob/main/docs/user/files-and-folders/img/favorites/favorites-personal.png",
+    "source_blob": "711096d42d694bc146741a48b3bf228cdf92ffba",
+    "source_sha256": "1d11ef2b6942b880090b1366cd83853bdb6a66b448e96ae81dde1c5e08783de7"
+  }
+}

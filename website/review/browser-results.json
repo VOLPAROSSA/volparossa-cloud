@@ -1,0 +1,165 @@
+{
+  "checkedAt": "2026-10-30T21:03:53.269Z",
+  "url": "http://127.0.0.1:8770/volparossa-cloud/",
+  "responsive": [
+    {
+      "label": "chromium-320",
+      "width": 320,
+      "scroll": 320,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 168407,
+      "initialRequests": 11,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "chromium-390",
+      "width": 390,
+      "scroll": 390,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 168407,
+      "initialRequests": 11,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "chromium-768",
+      "width": 768,
+      "scroll": 768,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 211877,
+      "initialRequests": 11,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "chromium-1440",
+      "width": 1440,
+      "scroll": 1440,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 501193,
+      "initialRequests": 14,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "chromium-1920",
+      "width": 1920,
+      "scroll": 1920,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 501193,
+      "initialRequests": 14,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "no-js",
+      "width": 390,
+      "scroll": 390,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 437402,
+      "initialRequests": 16,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "landscape",
+      "width": 844,
+      "scroll": 844,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 422755,
+      "initialRequests": 14,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "text-200-percent",
+      "width": 1440,
+      "scroll": 1440,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 372083,
+      "initialRequests": 12,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "firefox-390",
+      "width": 390,
+      "scroll": 390,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 168407,
+      "initialRequests": 11,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "firefox-1440",
+      "width": 1440,
+      "scroll": 1440,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 372083,
+      "initialRequests": 12,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "firefox-1920",
+      "width": 1920,
+      "scroll": 1920,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 372083,
+      "initialRequests": 12,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "label": "firefox-2560",
+      "width": 2560,
+      "scroll": 2560,
+      "missing": [],
+      "overlaps": 0,
+      "externalAssets": [],
+      "initialBytes": 372083,
+      "initialRequests": 12,
+      "errors": [],
+      "failed": []
+    }
+  ],
+  "accessibility": [
+    {
+      "label": "chromium-390",
+      "violations": []
+    },
+    {
+      "label": "chromium-1440",
+      "violations": []
+    }
+  ],
+  "interactions": [
+    "Keyboard skip link, menu and Escape; both replays; bounded animation; offscreen cancellation; live reduced-motion change; no-JS native menu"
+  ],
+  "chromiumVersion": "154.0.8037.57",
+  "firefoxVersion": "153.0"
+}
