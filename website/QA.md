@@ -1,112 +1,84 @@
-# Initial website review — 30 October 2026
+# Cloud concept fidelity review
 
-This records the pre-publication review. The subsequent owner-authorized release
-and live checks are recorded in [PR #21](https://github.com/VOLPAROSSA/volparossa-cloud/pull/21).
+The owner requested a closer match to the selected Crystal Archive concept after
+publication of PR #21. This revision starts from published Cloud commit
+`5bfbf975b01e14135160937f22edeb4a476f4c43`. Both supplied briefs and the selected
+reference were revisited; the unchanged source/theme pins and screenshot choice
+are recorded in [CONTENT.md](CONTENT.md) and [ASSETS.md](ASSETS.md).
 
-The build was reviewed against selected Cloud concept 01, the original crystal
-fox/glass in 02, the third courtyard section only in 03, the original logo and
-the shared-family reference 05. Both attached instruction files were read in full.
-Source pins, interpretation and upstream screenshot fallback are recorded in
-[CONTENT.md](CONTENT.md) and [ASSETS.md](ASSETS.md).
+## Visual comparison
 
-## Actual browser review
-
-The complete rendered page, including every below-fold section, was captured
-and visually inspected in Firefox on desktop and mobile. The hero, encryption,
-courtyards and recovery were also reviewed individually. Refinement corrected
-image/label overlap, kept the complete fox visible on mobile, and darkened the
-hero text area without changing the fox silhouette. The screenshot is large,
-uncropped beyond the documented upstream excerpt, and separately attributed.
+The complete actual page was compared with selected concept 01, including every
+section below the fold. The finished desktop/mobile Firefox renders are retained:
 
 [Desktop page](review/firefox-1440-full.webp) ·
-[Mobile page](review/firefox-390-full.webp) ·
-[Encrypt](review/firefox-1440-how-it-works.webp) ·
-[Participants](review/firefox-1440-participants.webp) ·
-[Recover](review/firefox-1440-recover.webp)
+[Mobile page](review/firefox-390-full.webp)
 
-The scripted browser checks used Chromium 154 and Playwright's Firefox, at:
+| Section | Fidelity correction |
+| --- | --- |
+| [Hero](review/firefox-1440-top.webp) | Shorter panoramic composition, larger shared brand, full fox silhouette and quieter left copy area. |
+| [OpenCloud](review/firefox-1440-opencloud.webp) | Larger original brand, central real interface, full-height amber landscape crystal and soft paper-to-dark edge transition. |
+| [Encrypt](review/firefox-1440-how-it-works.webp) | Luminous angular encrypted crystal and matching facets, fine SVG light paths, textured burgundy background and a shaded document outline. |
+| [Participants](review/firefox-1440-participants.webp) | Title on a feathered parchment transition over the wide courtyard scene, followed by a compact three-part explanation band. |
+| [Recover](review/firefox-1440-recover.webp) | Large returning facets flow toward a reassembled glass document. Explicit verification, local decryption and the ordinary file remain in the ordered HTML explanation. |
+| [Development](review/firefox-1440-development.webp) | Compact introduction beside proof and unfinished-work columns. Owner-local recovery limitations stay visible. Supplementary evidence/privacy scope uses a native disclosure. |
+| Closing/footer | Shallower valley panorama, a single-line desktop headline and tighter shared footer spacing. |
 
-- Chromium: 320, 390, 768, 1440 and 1920 pixels wide.
-- Firefox: 390, 1440, 1920 and 2560 pixels wide.
-- Mobile landscape: 844×390.
-- No JavaScript: 390×844, including native menu interaction.
-- 200% root text enlargement: 1440×900.
+At 1440px, the page is approximately 16% shorter than the original 5339px render,
+closer to the selected reference's overall rhythm. The real attributed upstream
+interface, shared navigation order and explicit development limitations remain
+intentional differences from the concept's invented interface and abbreviated
+copy. All text and controls are HTML, not a screenshot of the concept.
 
-All checks passed: no horizontal page overflow, missing visible images, artwork
-outside its diagram area, failed responses, JavaScript errors or external runtime
-asset requests. axe WCAG 2 A/AA and 2.1 AA reported **zero violations** at 390 and
-1440. The keyboard skip link, main focus, menu and Escape operation passed. Both
-explanation buttons replay the sequence and finish within five seconds; scrolling
-them off screen cancels motion. Reduced motion, including changing that preference
-at runtime, disables animation and hides replay controls. With no JS, the complete
-ordered explanations and native menu remain available. Hidden-tab cancellation
-is implemented through `visibilitychange`; no claim of a physical-device/tab
-power measurement is made. See [browser results](review/browser-results.json).
+During actual visual review, 200% text enlargement exposed a header/hero overlap;
+font-relative spacing fixed it, and a geometry assertion now guards it. A final
+paint-only mask adjustment removed a straight seam beside the product crystal;
+the mobile/desktop Firefox product and full-page renders were refreshed afterward.
+External-link arrows use exact decorative SVG geometry so a missing fallback
+font cannot turn them into empty glyph boxes.
 
-Public destination checks returned HTTP 200 for the Core page, central docs,
-Get involved, credits and OpenCloud's English homepage. GitHub documentation paths
-and evidence anchors were checked against the pinned local source. The separate
-central-docs card passed 390/1440 renders, seven source links and axe with zero
-violations. The Cloud site's buttons retain the already live generic docs route.
+## Browser and accessibility checks
 
-## Performance
+All scripted checks passed on Chromium 154 and Playwright Firefox:
 
-Lighthouse **13.6.0**, installed headless Chromium **154**, Linux container,
-loopback Python HTTP server, default simulated mobile throttling; separate
-`--preset=desktop` run. These are local lab measurements, not field performance.
-The exact settings and metrics are retained in
-[lighthouse-summary.json](review/lighthouse-summary.json).
+- Chromium: 320, 390, 768, 1440 and 1920px.
+- Firefox: 390, 1440, 1920 and 2560px.
+- Mobile landscape 844×390, no JavaScript at 390×844, 200% text at 1440×900.
+- No horizontal overflow, header/content overlap, missing visible images,
+  artwork escaping its area, JavaScript errors, failed requests or external
+  runtime asset requests.
+- Zero axe WCAG A/AA and 2.1 AA violations at 390 and 1440px.
+- Keyboard skip/main focus, native menu, Escape, both finite replays and
+  offscreen cancellation; reduced motion including live preference changes.
+- Native evidence disclosure works with JavaScript disabled and from the
+  keyboard. Ordered explanations remain complete without animation.
+
+[Machine-readable browser results](review/browser-results.json). Screenshots
+were inspected at actual desktop/mobile widths, not only as a page thumbnail.
+No physical-device or Safari testing is claimed.
+
+## Performance and build
+
+Lighthouse 13.6.0, headless Chromium 154, Linux container, Python loopback HTTP
+server; default simulated mobile throttling and a separate desktop preset.
+These are local lab measurements, not field guarantees. The measurement preceded
+only the final decorative edge-mask paint adjustment described above.
 
 | Profile | Performance | Accessibility | Best practices | LCP | Blocking time | CLS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Mobile | 97 | 100 | 100 | 2.6 s | 50 ms | <0.001 |
-| Desktop | 100 | 100 | 100 | 0.7 s | 0 ms | 0.001 |
+| Mobile | 95 | 100 | 100 | 2.9 s | 70 ms | 0 |
+| Desktop | 99 | 100 | 100 | 1.0 s | 0 ms | 0.001 |
 
-- Initial CSS/JS: **12,714 bytes gzip**, including the shared theme and tokens.
-- Mobile hero 800px WebP fallback: **120,810 bytes**; smaller AVIF is preferred.
-- Desktop hero 1536px WebP fallback: **229,798 bytes**; AVIF is preferred.
-- Initial mobile subresource transfer in the 390px browser check: **168,407 bytes**
-  (fonts included; navigation HTML is separate). With HTML included, still below
-  0.25 MB and the 1.5 MB target. Browser lazy-loading distance can preload more
-  on larger viewports. No-JS browsers may eagerly load lazy images; that measured
-  mobile subresource transfer was 437,402 bytes.
-- All large lower scenes are lazy-loaded, with local AVIF/WebP/JPEG responsive
-  variants and explicit dimensions. The hero is eager/high priority.
+[Settings and metrics](review/lighthouse-summary.json). CSS/JS totals **13,888
+bytes gzip**. The Chromium 390px initial subresource transfer was **543,125
+bytes**, including local fonts and the new texture; navigation HTML is separate.
+With HTML it remains below the 1.5MB mobile target. Lighthouse's full measured
+mobile transfer was 803KiB. Responsive hero files retain their previous budgets.
+All later scene images are lazy-loaded; masters are not shipped.
 
-## Build, provenance and boundaries
-
-Both default noindex and explicit production builds passed the offline checker:
-project-prefix paths/anchors, metadata, source hashes, original icon Git blobs,
-local assets, single H1/landmarks, no external runtime resources and byte budgets.
-The unchanged theme manifest is verified during every build. The supplied logo's
-pixels/alpha match the shared original. Distribution assets are separated from
-masters, instructions, tests and private/runtime sources. No domain CNAME or
-root-domain robots file is copied.
-
-The original Python owner-upload boundary tests passed (9/9). The existing
-full Node runtime suite was also attempted in this workspace: 92 passed, 6 failed,
-3 explicitly unstaged SDK tests skipped. Rechecking the unchanged base in a
-shorter checkout reduced this to 103 passed, 5 failed, 3 skipped; the catalog
-subtests could then run. A diagnostic wrapper outside the source tree captured
-the closed helper code **`SnapshotError AGENT_PARENT_PATH_TOO_LONG`** for owner
-uploads. The workspace lacks a short per-user GnuPG socket directory, and nested
-synthetic upload paths hit the helper's existing Unix-socket path-length guard.
-The same upload failures reproduce on unchanged base commit
-`468e29f3ff1e183bfb67830e9fdfb893807e8f9b`. No runtime, tests, guard or host setup
-was altered to make this green. This is a local environment limitation, not
-website or live peer-storage evidence. The existing hosted workflow for that
-base passed: [run 39850931824](https://github.com/VOLPAROSSA/volparossa-cloud/actions/runs/39850931824).
-The PR's hosted results are tracked in its checks and description.
-
-No new real OpenCloud/Core storage trial, device recovery, Safari test or physical
-mobile-device test is claimed. The page reports the separately documented scoped
-trial, not these website checks, as its integration evidence.
-
-## Review and future publication
-
-The Cloud page and central docs card are separate reviewable changes. No merge,
-workflow dispatch, Pages setting, DNS/CNAME, registry publication flag, host
-networking or production deployment was performed. Pages was read-only inspected
-and already reports Actions mode with HTTPS enforced. A manual main-only
-publication workflow is prepared; its publish jobs are excluded from PR/push
-validation. The release and live verification remain a separate reviewed step.
+Both noindex preview and explicit production builds pass the offline checker:
+project-prefix paths, anchors, metadata, public-output boundaries, asset hashes,
+original icon blobs, shared-theme identity and byte budgets. `git diff --check`
+passes. The runtime, patches, storage policy, host network and domain settings
+are unchanged. No new storage trial is claimed; hosted repository checks and the
+manual main-only publication are recorded in the refinement pull request.

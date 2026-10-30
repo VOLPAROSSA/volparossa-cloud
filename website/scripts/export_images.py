@@ -31,7 +31,7 @@ for name, compositions in CROPS.items():
             image.save(OUT/(stem+'.webp'), quality=83, method=6)
             image.save(OUT/(stem+'.jpg'), quality=85, optimize=True, progressive=True)
             variants[name][kind].append(dict(stem=stem, width=size[0], height=size[1]))
-for name, maxsize in [('product-crystal',(512,768)), ('encrypted',(400,500)), ('fragments',(640,430))]:
+for name, maxsize in [('product-crystal',(768,1152)), ('encrypted',(500,500)), ('recovered',(500,500)), ('fragments',(900,600)), ('crystal-texture',(1200,800))]:
     image = Image.open(ROOT/'masters'/f'{name}.png')
     image.thumbnail(maxsize, Image.Resampling.LANCZOS)
     image.save(OUT/(name+'.webp'), quality=87, method=6)

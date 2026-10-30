@@ -85,12 +85,16 @@ def build(output, production):
     values.update(hero_picture=picture('hero', True), courtyards_picture=picture('courtyards'), valley_picture=picture('valley'))
     values.update({key+'_icon':icon(name) for key,name in {'lock':'lock-keyhole','key':'key-round','cube':'box','devices':'laptop','check':'circle-check','play':'play'}.items()})
     # Exact document outline is code, not an image of generated text. ID-free for reuse.
-    values['document_icon'] = '<svg class="file-document" viewBox="0 0 110 145" aria-hidden="true" focusable="false"><path d="M17 4h53l25 27v107H17z" fill="#f1ddbd" stroke="#e8b974" stroke-width="2"/><path d="M70 4v28h25" fill="#c6a47b" stroke="#e8b974" stroke-width="2"/><path d="M30 55h49M30 69h49M30 83h49M30 97h36M30 111h41" stroke="#9c7958" stroke-width="3" stroke-linecap="round"/></svg>'
+    for name in ['document', 'recovered_document']:
+        values[name+'_icon'] = f'<svg class="file-document" viewBox="0 0 110 145" aria-hidden="true" focusable="false"><defs><linearGradient id="{name}-paper" x2="1" y2="1"><stop stop-color="#fff0d4"/><stop offset=".45" stop-color="#dfb579"/><stop offset="1" stop-color="#a96a36"/></linearGradient><linearGradient id="{name}-edge" x2="0" y2="1"><stop stop-color="#ffdc9b"/><stop offset="1" stop-color="#91521f"/></linearGradient></defs><path d="M18 5h53l26 27v108H18z" fill="#6c361c" stroke="#edb366" stroke-width="3"/><path d="M14 3h54l25 27v107H14z" fill="url(#{name}-paper)" stroke="#f6ca83" stroke-width="1.5"/><path d="M68 3v28h25" fill="url(#{name}-edge)" stroke="#ffdda3" stroke-width="1.5"/><path d="M27 54h49M27 68h49M27 82h49M27 96h36M27 110h41" stroke="#825732" stroke-width="3" stroke-linecap="round"/><path d="M27 52h49M27 66h49M27 80h49M27 94h36M27 108h41" stroke="#ffe6be" stroke-width="1" stroke-linecap="round"/></svg>'
     values['content'] = render((ROOT / 'src/page.html').read_text(), values)
     values.update(social_image=DATA['canonical']+'assets/scenes/social.jpg', social_alt='A fox sculpted from luminous amber glass on a dark burgundy background.', body_class='cloud-page')
     robots = 'index,follow' if production else 'noindex,nofollow'
     values['head_extra'] = f'<meta name="robots" content="{robots}"><link rel="stylesheet" href="assets/cloud.css"><script src="assets/cloud.js" defer></script>'
     html = render((THEME / 'templates/layout.html').read_text(), values)
+    # A text-node-only replacement avoids missing-arrow glyphs in minimal browsers.
+    external_arrow = '<svg class="external-arrow" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 13 13 3M3 3h10v10"/></svg>'
+    html = re.sub(r'(>[^<>]*)↗', lambda match: match.group(1)+external_arrow, html)
     (output / 'index.html').write_text(html)
     if production:
         (output / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+DATA['canonical']+'</loc></url></urlset>\n')

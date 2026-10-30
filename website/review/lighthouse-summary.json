@@ -1,9 +1,16 @@
 {
   "mobile": {
-    "fetch_time": "2026-10-30T21:06:13.773Z",
-    "version": "13.6.0",
-    "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
-    "settings": {
+    "lighthouseVersion": "13.6.0",
+    "fetchTime": "2026-10-30T21:55:49.406Z",
+    "environment": {
+      "networkUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36",
+      "hostUserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+      "benchmarkIndex": 1315.5,
+      "credits": {
+        "axe-core": "4.14.0"
+      }
+    },
+    "configSettings": {
       "output": [
         "json"
       ],
@@ -61,38 +68,41 @@
       "skipAudits": null
     },
     "scores": {
-      "performance": 97.0,
-      "accessibility": 100,
-      "best-practices": 100
+      "performance": 0.95,
+      "accessibility": 1,
+      "best-practices": 1
     },
     "metrics": {
-      "first-contentful-paint": {
-        "value": 1204.7554,
-        "display": "1.2\u00a0s"
-      },
       "largest-contentful-paint": {
-        "value": 2629.7554,
-        "display": "2.6\u00a0s"
+        "value": 2854.8617,
+        "display": "2.9\u00a0s"
       },
       "total-blocking-time": {
-        "value": 52,
-        "display": "50\u00a0ms"
+        "value": 68.56915000000004,
+        "display": "70\u00a0ms"
       },
       "cumulative-layout-shift": {
-        "value": 3.571314374091941e-05,
+        "value": 3.013996048613968e-05,
         "display": "0"
       },
-      "speed-index": {
-        "value": 1204.7554,
-        "display": "1.2\u00a0s"
+      "total-byte-weight": {
+        "value": 821942,
+        "display": "Total size was 803\u00a0KiB"
       }
     }
   },
   "desktop": {
-    "fetch_time": "2026-10-30T21:03:27.078Z",
-    "version": "13.6.0",
-    "browser": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
-    "settings": {
+    "lighthouseVersion": "13.6.0",
+    "fetchTime": "2026-10-30T21:56:03.417Z",
+    "environment": {
+      "networkUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "hostUserAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+      "benchmarkIndex": 2063,
+      "credits": {
+        "axe-core": "4.14.0"
+      }
+    },
+    "configSettings": {
       "output": [
         "json"
       ],
@@ -150,30 +160,26 @@
       "skipAudits": null
     },
     "scores": {
-      "performance": 100,
-      "accessibility": 100,
-      "best-practices": 100
+      "performance": 0.99,
+      "accessibility": 1,
+      "best-practices": 1
     },
     "metrics": {
-      "first-contentful-paint": {
-        "value": 324.0048,
-        "display": "0.3\u00a0s"
-      },
       "largest-contentful-paint": {
-        "value": 704.0047999999999,
-        "display": "0.7\u00a0s"
+        "value": 1007.6648499999999,
+        "display": "1.0\u00a0s"
       },
       "total-blocking-time": {
         "value": 0,
         "display": "0\u00a0ms"
       },
       "cumulative-layout-shift": {
-        "value": 0.0005845293565328781,
+        "value": 0.0005997326062359893,
         "display": "0.001"
       },
-      "speed-index": {
-        "value": 324.0048,
-        "display": "0.3\u00a0s"
+      "total-byte-weight": {
+        "value": 1163710,
+        "display": "Total size was 1,136\u00a0KiB"
       }
     }
   }

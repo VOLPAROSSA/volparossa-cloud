@@ -38,6 +38,16 @@ secret-sharing threshold, SLA or production-ready claim is introduced.
 The courtyard buildings explicitly represent devices. Golden links are scenery,
 not a claim about participants' geography, failure independence or personal trust.
 
+The visual fidelity correction was requested after the initial publication.
+It preserves all seven sections and their substantive copy. The development
+section now uses a compact introduction and two evidence/scope columns, while
+the unfinished accounts, sharing, sync, cross-device recovery and maintenance
+remain visible. The owner-local keys/server limitation remains visible too.
+Supplementary read-only-import/privacy wording and the dated evidence links are
+in a native, keyboard-accessible “Trial evidence and scope” disclosure, which
+also works without JavaScript. The three storage explanations retain explicit
+ordered steps, including verification and local decryption after reassembly.
+
 The original upstream OpenCloud screenshot is the documented fallback. No
 integration screenshot or prepared source-built demo is present in the selected
 workspace/repository. Producing one would require a new upstream source/dependency

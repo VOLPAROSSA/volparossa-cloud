@@ -48,17 +48,21 @@
       "bytes": 2890972,
       "sha256": "982ba42698001e7c8500fdfc302408539decef9e81a98df0623cd7aa1c3ffeb0"
     },
+    "masters/crystal-texture.png": {
+      "bytes": 1892677,
+      "sha256": "b8130a48aa62d99df2127cdb913e50be70f35448990643033104cbc27a1d20d1"
+    },
     "masters/encrypted.png": {
-      "bytes": 1790190,
-      "sha256": "3043f9c02954f863ec10dc6ea201f7bbaafcc3d8e9b863ce2d3fc3d614427588"
+      "bytes": 1736535,
+      "sha256": "83d3e86658a0029b611d236259fc875f8d547e19ef4d578170d86fb1d5418860"
     },
     "masters/fragments.png": {
-      "bytes": 2271946,
-      "sha256": "b00ba8489d49b213d3faf589c41a7788048eec01cc518f0a82854c20a96db834"
+      "bytes": 1961580,
+      "sha256": "73caa57a8a1438c001a3547ca166dd4fbd93b940750f1a61edcb7c691591f95d"
     },
     "masters/generation.json": {
-      "bytes": 7518,
-      "sha256": "080a370f384c98929bd1203c47dbb0c6df36f5084e2f75b2d950a38f84e2b6e8"
+      "bytes": 11117,
+      "sha256": "a0bb9b0c68ffe9961b6feb86b31123c75a654d787dcfa4ed21e869082e008cb2"
     },
     "masters/hero.png": {
       "bytes": 2417771,
@@ -68,13 +72,17 @@
       "bytes": 2186634,
       "sha256": "fff30031b5839dff3abc65d4168cf9c11b44830aa2f5ce93a85145143356e777"
     },
+    "masters/recovered.png": {
+      "bytes": 2250498,
+      "sha256": "0a6b83853b92b12eff8a8cd7ebe41034ae01a7d05ef2bf880ff1a7dde70885ee"
+    },
     "masters/valley.png": {
       "bytes": 2454573,
       "sha256": "84b15b9f7e39f5020c6a6eea282ea6fde3b9e7af93a76781733a7e5605bf3039"
     },
     "assets/cloud.css": {
-      "bytes": 18155,
-      "sha256": "445fd5a423715159111aed667b35e0cb7b70d52046fc52182a3b524c30b8f066"
+      "bytes": 24205,
+      "sha256": "af9e9e19e68a139b9c55c81b672f55ceb0ae4e2c0df24b89127da49ff040af1c"
     },
     "assets/cloud.js": {
       "bytes": 1668,
@@ -160,13 +168,17 @@
       "bytes": 140976,
       "sha256": "c222ef5c874ec6062d1839f7803fb59d88c9dd4ecdc7afeb92a3ee8854e3b2c5"
     },
+    "assets/scenes/crystal-texture.webp": {
+      "bytes": 92482,
+      "sha256": "b35dcafc8d01e45546ed10ccb4854a2f024628bfcd2cee618eb2da4e824cffb9"
+    },
     "assets/scenes/encrypted.webp": {
-      "bytes": 50466,
-      "sha256": "abbf6efa9c0f6309421a98a33ae9284176703985166cc7df70dafee54175f7e4"
+      "bytes": 77552,
+      "sha256": "14aa82c51a12d1edf098de9bc376af4714ccf1026569f6fb3521b1676129bb3f"
     },
     "assets/scenes/fragments.webp": {
-      "bytes": 78044,
-      "sha256": "668ac29e35272da810bd6e2f28e549e067d1e12abf709c8bd320c7e03b56a539"
+      "bytes": 129080,
+      "sha256": "32a8cfaf144a6dbc847504042d34c384294edc3d3d6a41bb575a9592049fd19d"
     },
     "assets/scenes/hero-desktop-1536.avif": {
       "bytes": 140574,
@@ -216,9 +228,17 @@
       "bytes": 120810,
       "sha256": "7802db194869f79ce35294eae0f291f23467a74cae70d3830d70b2c7bdb14b91"
     },
+    "assets/scenes/paper-grain.svg": {
+      "bytes": 269,
+      "sha256": "25ebb240b4082d868164bb490c1e2e2388b6aac03df11779c591e4f253dc2635"
+    },
     "assets/scenes/product-crystal.webp": {
-      "bytes": 92518,
-      "sha256": "2afc5c2b30618c904b570bc7cf492a4b24d561f95229e5b954c3e3bf714150c5"
+      "bytes": 197164,
+      "sha256": "f7df0393fa89c013fb1680ce5990fd44a410d0f334616bd9ec204557485f161a"
+    },
+    "assets/scenes/recovered.webp": {
+      "bytes": 81888,
+      "sha256": "758c53c69e361d4391c9271e620878720d2d5b6f20e6e6790e6b39936db0b577"
     },
     "assets/scenes/social.jpg": {
       "bytes": 193305,
