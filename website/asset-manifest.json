@@ -1,0 +1,284 @@
+{
+  "crop_boxes": {
+    "hero": {
+      "desktop": [
+        0,
+        65,
+        1536,
+        985
+      ],
+      "mobile": [
+        400,
+        65,
+        1536,
+        985
+      ]
+    },
+    "courtyards": {
+      "desktop": [
+        0,
+        150,
+        1536,
+        850
+      ],
+      "mobile": [
+        0,
+        0,
+        1536,
+        1024
+      ]
+    },
+    "valley": {
+      "desktop": [
+        0,
+        175,
+        1536,
+        815
+      ],
+      "mobile": [
+        0,
+        175,
+        1536,
+        1024
+      ]
+    }
+  },
+  "files": {
+    "masters/courtyards.png": {
+      "bytes": 2890972,
+      "sha256": "982ba42698001e7c8500fdfc302408539decef9e81a98df0623cd7aa1c3ffeb0"
+    },
+    "masters/encrypted.png": {
+      "bytes": 1790190,
+      "sha256": "3043f9c02954f863ec10dc6ea201f7bbaafcc3d8e9b863ce2d3fc3d614427588"
+    },
+    "masters/fragments.png": {
+      "bytes": 2271946,
+      "sha256": "b00ba8489d49b213d3faf589c41a7788048eec01cc518f0a82854c20a96db834"
+    },
+    "masters/generation.json": {
+      "bytes": 7518,
+      "sha256": "080a370f384c98929bd1203c47dbb0c6df36f5084e2f75b2d950a38f84e2b6e8"
+    },
+    "masters/hero.png": {
+      "bytes": 2417771,
+      "sha256": "37d449872e595f7412856c195950211d60f5e826561fc147b42105e7cba3ca20"
+    },
+    "masters/product-crystal.png": {
+      "bytes": 2186634,
+      "sha256": "fff30031b5839dff3abc65d4168cf9c11b44830aa2f5ce93a85145143356e777"
+    },
+    "masters/valley.png": {
+      "bytes": 2454573,
+      "sha256": "84b15b9f7e39f5020c6a6eea282ea6fde3b9e7af93a76781733a7e5605bf3039"
+    },
+    "assets/cloud.css": {
+      "bytes": 18155,
+      "sha256": "445fd5a423715159111aed667b35e0cb7b70d52046fc52182a3b524c30b8f066"
+    },
+    "assets/cloud.js": {
+      "bytes": 1668,
+      "sha256": "9a035fdc60568fcb8c63de312aaea90f5c9709c03b5c7728a10600d6a865936c"
+    },
+    "assets/icons/lucide/LICENSE": {
+      "bytes": 3208,
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+    },
+    "assets/icons/lucide/box.svg": {
+      "bytes": 401,
+      "sha256": "511862693d914d2bf1947c9ccc513595f2a256541f5dd4f6f9ac8383cd41ac4f"
+    },
+    "assets/icons/lucide/circle-check.svg": {
+      "bytes": 278,
+      "sha256": "9711e045a5999f8a3b0782eb88e09b04e0559bc7b379dcc0a4ae645223e10345"
+    },
+    "assets/icons/lucide/key-round.svg": {
+      "bytes": 453,
+      "sha256": "f8cdea843754ed360e36b04bf6aa2c2b3610935dd39ffc685a36c4d0a05be248"
+    },
+    "assets/icons/lucide/laptop.svg": {
+      "bytes": 405,
+      "sha256": "b8389056d3b7125670b60a4bd03e6d4ecc440e228f4140e7b66c4e97dcb0dc70"
+    },
+    "assets/icons/lucide/lock-keyhole.svg": {
+      "bytes": 337,
+      "sha256": "fc0b8b7590d1d9e9bb0112c5c2e15a78ade0bfeca6d6f8c79fbbe149236d74be"
+    },
+    "assets/icons/lucide/play.svg": {
+      "bytes": 306,
+      "sha256": "d7c34786135922a92b6896f6c2384ceeb0346afbf6041dc79982011411409833"
+    },
+    "assets/icons/lucide/source.json": {
+      "bytes": 1506,
+      "sha256": "e5b3d1846244a61d2c03c5407a01e676aa01ddea87c213d8b1e41d3ff85d065f"
+    },
+    "assets/scenes/courtyards-desktop-1536.avif": {
+      "bytes": 161768,
+      "sha256": "729e51d21cb5f40319bedfdd8c3821d9e7aa818ab550f68a085d966138444cbe"
+    },
+    "assets/scenes/courtyards-desktop-1536.jpg": {
+      "bytes": 331857,
+      "sha256": "1549758d74e25448d066a74dd44ac450eb87df0264c5e704714b44ffa6d64467"
+    },
+    "assets/scenes/courtyards-desktop-1536.webp": {
+      "bytes": 279386,
+      "sha256": "1f9b7a3ecf028b221ebf5e93c18e49a2ef8bdefe90e1320e56a0dd31e821d88d"
+    },
+    "assets/scenes/courtyards-desktop-960.avif": {
+      "bytes": 78825,
+      "sha256": "90b04d0968347c78e601b839f67a5ecd87e374872d32c86d2f248c26d3ab0cdf"
+    },
+    "assets/scenes/courtyards-desktop-960.jpg": {
+      "bytes": 153294,
+      "sha256": "27daaf46ff3443e4724b5f9dfaba487a6ebc04f65dfdc525657d2549da720f3a"
+    },
+    "assets/scenes/courtyards-desktop-960.webp": {
+      "bytes": 141168,
+      "sha256": "40b2162ee12fbb5e1d8d4a8e8bb64236f695a7c378efc8a87b15eb6bd5e68362"
+    },
+    "assets/scenes/courtyards-mobile-480.avif": {
+      "bytes": 31319,
+      "sha256": "2af72dc041c3bc60725bd89cbb6bd630797a3343d7ec6a1c7ee1798bba407786"
+    },
+    "assets/scenes/courtyards-mobile-480.jpg": {
+      "bytes": 59408,
+      "sha256": "f12408a6d83a7e27ccadf74f0f5686dc4966acb477ac86835ec934745ac5d6d3"
+    },
+    "assets/scenes/courtyards-mobile-480.webp": {
+      "bytes": 58370,
+      "sha256": "51e13dae6927cb7603aa3ac95449f82da732a957d9380cc7145761eaa1501199"
+    },
+    "assets/scenes/courtyards-mobile-800.avif": {
+      "bytes": 79349,
+      "sha256": "c7f6dd5b5efbd23a1ed6da37049bfdab3299fd84561a0a33071a0b8b76108916"
+    },
+    "assets/scenes/courtyards-mobile-800.jpg": {
+      "bytes": 152225,
+      "sha256": "21e914ce11cd823dab4368ce3b44d0a1009d85381a222cb630dc716617bbf10a"
+    },
+    "assets/scenes/courtyards-mobile-800.webp": {
+      "bytes": 140976,
+      "sha256": "c222ef5c874ec6062d1839f7803fb59d88c9dd4ecdc7afeb92a3ee8854e3b2c5"
+    },
+    "assets/scenes/encrypted.webp": {
+      "bytes": 50466,
+      "sha256": "abbf6efa9c0f6309421a98a33ae9284176703985166cc7df70dafee54175f7e4"
+    },
+    "assets/scenes/fragments.webp": {
+      "bytes": 78044,
+      "sha256": "668ac29e35272da810bd6e2f28e549e067d1e12abf709c8bd320c7e03b56a539"
+    },
+    "assets/scenes/hero-desktop-1536.avif": {
+      "bytes": 140574,
+      "sha256": "b924b28f0a453aba7854a453899df8c7f237ee55650dbd58e8612007662e5cdf"
+    },
+    "assets/scenes/hero-desktop-1536.jpg": {
+      "bytes": 302165,
+      "sha256": "0a6bfaa77bf3fa17fde283a6669e268497b22abccacfb318dab9e0245b926b32"
+    },
+    "assets/scenes/hero-desktop-1536.webp": {
+      "bytes": 229798,
+      "sha256": "100513d0efb406bedc106c60133a7e703a89ec6b48ca22b0d42ffd9829580240"
+    },
+    "assets/scenes/hero-desktop-960.avif": {
+      "bytes": 62136,
+      "sha256": "4e513040c5aadefef5b40ca0390581ce34e6512a68e2cdf3d733908823fa5b37"
+    },
+    "assets/scenes/hero-desktop-960.jpg": {
+      "bytes": 128785,
+      "sha256": "65417958652c812d148c0a6f0a6303ec74bc679e869f3ad5e0887f8912b9708d"
+    },
+    "assets/scenes/hero-desktop-960.webp": {
+      "bytes": 102192,
+      "sha256": "86616fc1890e07633bb87ae6d97967dbcb2819d4ace6a62a6a379004057cf6ad"
+    },
+    "assets/scenes/hero-mobile-480.avif": {
+      "bytes": 29716,
+      "sha256": "754edc440a8d88a99bc857ed47df5470c615559d99099d50eb9d47a8501dbeb5"
+    },
+    "assets/scenes/hero-mobile-480.jpg": {
+      "bytes": 57454,
+      "sha256": "e546833e95a2a4f24389417aafcbb2d9d344f9a7f59301647d50a61400e0435e"
+    },
+    "assets/scenes/hero-mobile-480.webp": {
+      "bytes": 48194,
+      "sha256": "242ff78863b6cdd88c6818902c6fed4749741d3804de3be0e758f6142032c724"
+    },
+    "assets/scenes/hero-mobile-800.avif": {
+      "bytes": 73186,
+      "sha256": "88d8cd948563d12a1c278911e2ce3075e818afa185980b14a45dc378d4db7010"
+    },
+    "assets/scenes/hero-mobile-800.jpg": {
+      "bytes": 146605,
+      "sha256": "62a5f698007aacfdcc65879eb9f1f3d80eff71549832250690682ca214fe9fee"
+    },
+    "assets/scenes/hero-mobile-800.webp": {
+      "bytes": 120810,
+      "sha256": "7802db194869f79ce35294eae0f291f23467a74cae70d3830d70b2c7bdb14b91"
+    },
+    "assets/scenes/product-crystal.webp": {
+      "bytes": 92518,
+      "sha256": "2afc5c2b30618c904b570bc7cf492a4b24d561f95229e5b954c3e3bf714150c5"
+    },
+    "assets/scenes/social.jpg": {
+      "bytes": 193305,
+      "sha256": "23826b2d00cff031763f8cea6c058212e08d350c629a93ee48affee6fb7fc7ee"
+    },
+    "assets/scenes/valley-desktop-1536.avif": {
+      "bytes": 109690,
+      "sha256": "c5c4c2c1403457f66f0ce1e1520e45765bd771007943bc7a4af6d37c5cba1fcb"
+    },
+    "assets/scenes/valley-desktop-1536.jpg": {
+      "bytes": 227478,
+      "sha256": "e25e9c3a91b4fe288b112a2cbac0fc8ff15a8498998e1dedf261c10019dbc6c0"
+    },
+    "assets/scenes/valley-desktop-1536.webp": {
+      "bytes": 178352,
+      "sha256": "865dffc10ebb9a2b30813e413e234d43ad66a18c3916215af3c0e96329cb9868"
+    },
+    "assets/scenes/valley-desktop-960.avif": {
+      "bytes": 50490,
+      "sha256": "47d3acbb3789592645c296f4cf8e9b26c8a62b7e39d0c35abee91c18a92a4a27"
+    },
+    "assets/scenes/valley-desktop-960.jpg": {
+      "bytes": 100555,
+      "sha256": "3feaebf39552e6356c65ac862f2cedb5806d304afdba9df7b53f5ac22f99a2fd"
+    },
+    "assets/scenes/valley-desktop-960.webp": {
+      "bytes": 85646,
+      "sha256": "1fa3fd3fa8a6487b432fa597729fbb1537697c7f6b324ad12ce6ad17db3073da"
+    },
+    "assets/scenes/valley-mobile-480.avif": {
+      "bytes": 17994,
+      "sha256": "b4adcaa640613e03c9f07d0859a2bdf7f531fd1e21d1a4c4524ac8d411bd0895"
+    },
+    "assets/scenes/valley-mobile-480.jpg": {
+      "bytes": 35071,
+      "sha256": "9d91ff6c520d9f2b2c3fdbc8aa2603e54a7247a4aa754a77105a0f3a7bf1ec92"
+    },
+    "assets/scenes/valley-mobile-480.webp": {
+      "bytes": 30252,
+      "sha256": "406ae22cb07b373cba0e4e1cabcc95703b184d3172f81fb0ea242bbe7dbb6ff0"
+    },
+    "assets/scenes/valley-mobile-800.avif": {
+      "bytes": 46210,
+      "sha256": "94c1d369e22d0a56871720c632624b341c78db1404834d494ed138f692b92b4c"
+    },
+    "assets/scenes/valley-mobile-800.jpg": {
+      "bytes": 91653,
+      "sha256": "f9690b73beb6dc38f9c3fe140b583e02a2be0cfa3a8f0fb90341717571fba338"
+    },
+    "assets/scenes/valley-mobile-800.webp": {
+      "bytes": 77442,
+      "sha256": "c25e22a9dfd60feaf22309c10e4e461e5325b46b2a0be9c1ac624ef152216dd3"
+    },
+    "assets/scenes/variants.json": {
+      "bytes": 1390,
+      "sha256": "df614e0b903191321c89982a8b71720c757d5bb6fd2cb98b843162c7d78d0b48"
+    },
+    "assets/upstream/cloud-screen.webp": {
+      "bytes": 13506,
+      "sha256": "cacc640020e6b0d23f5e95c5ff93f36536a2d180414102d81e482a61c88e5983"
+    }
+  }
+}
