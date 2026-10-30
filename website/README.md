@@ -103,7 +103,10 @@ mockups are not publication assets. `scripts/export_images.py` uses Pillow 12.3.
 with AVIF/WebP support for documented crops, responsive encodes and SHA-256
 inventory. Pillow is only needed to regenerate artwork, not to build the site.
 The encrypted object/facets are transparent; the exact labels, locks, keys,
-arrows and sequence are HTML/SVG. Counts of decorative shards are not protocol
+arrows and sequence are HTML/SVG. The refined process illustrations use luminous
+angular fragments, an encrypted polyhedron and a reassembled glass document,
+connected by restrained SVG paths on a dark crystalline texture. Counts of
+decorative shards are not protocol
 parameters. The object family is reused for recovery.
 
 ## Publication preparation

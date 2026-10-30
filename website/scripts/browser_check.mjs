@@ -25,6 +25,7 @@ async function inspect(page, label, screenshots = true) {
   }
   const geometry=await page.evaluate(()=>({
     width:innerWidth, scroll:document.documentElement.scrollWidth,
+    headerOverlap:document.querySelector('.site-header').getBoundingClientRect().bottom>document.querySelector('.cloud-breadcrumb').getBoundingClientRect().top+1,
     missing:[...document.images].filter(i=>i.getClientRects().length&&(!i.complete||!i.naturalWidth)).map(i=>i.src),
     overlaps:[...document.querySelectorAll('.process-sequence li')].filter(el=>{
       const art=el.querySelector('.process-art').getBoundingClientRect();const h=el.querySelector('h3').getBoundingClientRect();
@@ -34,6 +35,7 @@ async function inspect(page, label, screenshots = true) {
     externalAssets:performance.getEntriesByType('resource').filter(r=>new URL(r.name).origin!==location.origin).map(r=>r.name)
   }));
   assert(geometry.scroll<=geometry.width,`${label}: horizontal overflow`);
+  assert(!geometry.headerOverlap,`${label}: header overlaps hero content`);
   assert(!geometry.missing.length,`${label}: missing visible images ${geometry.missing}`);
   assert(!geometry.overlaps,`${label}: artwork outside its assigned area`);
   assert(!geometry.externalAssets.length,`${label}: external runtime requests`);
@@ -66,6 +68,9 @@ try {
       await page.locator('.mobile-nav summary').click();
       assert(await page.locator('.mobile-nav').getAttribute('open')!==null,'Native no-JS menu');
       assert(await page.locator('[data-play]:visible').count()===0,'Inert replay control shown without JS');
+      await page.locator('.evidence-details summary').click();
+      assert(await page.locator('.evidence-details').getAttribute('open')!==null,'Native evidence disclosure without JS');
+      assert(await page.locator('.evidence-details>p').isVisible(),'Evidence scope remains readable without JS');
     }
     await page.context().close();
   }
@@ -86,7 +91,9 @@ try {
     assert(await page.locator('#'+id).evaluate(e=>!e.classList.contains('is-playing')),'Offscreen animation stops');
   }
   await page.emulateMedia({reducedMotion:'reduce'});assert(await page.locator('[data-play]:visible').count()===0,'Motion preference changes applied');
-  results.interactions.push('Keyboard skip link, menu and Escape; both replays; bounded animation; offscreen cancellation; live reduced-motion change; no-JS native menu');
+  await page.locator('.evidence-details summary').focus();await page.keyboard.press('Enter');
+  assert(await page.locator('.evidence-details').getAttribute('open')!==null,'Evidence disclosure opens from keyboard');
+  results.interactions.push('Keyboard skip link, menu and Escape; both replays; bounded animation; offscreen cancellation; live reduced-motion change; no-JS native menu and evidence disclosure; keyboard evidence disclosure');
   await page.context().close();
 } finally {await chrome.close();}
 const fox=await firefox.launch();

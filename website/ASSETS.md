@@ -47,17 +47,19 @@ The original software/documentation licenses are not replaced by the site GPL.
 
 ## Clean generated artwork
 
-Six original PNG masters are retained in `masters/`; `generation.json` contains
+Eight clean PNG masters are retained in `masters/`; `generation.json` contains
 the exact prompts, reference filenames and generation date. OpenAI image
 generation created each separate clean scene/object without website text/UI.
-The three object masters preserve true alpha. No generated mark is used.
+The four object masters preserve true alpha. No generated mark is used.
 
 | Master | Purpose and reference |
 | --- | --- |
 | `hero.png` | Translucent amber fox and separated facets; first section of concept 02, subordinate to selected 01. Dark left area for HTML. |
 | `product-crystal.png` | Isolated decorative landscape crystal from concept 02's product section. Imagined scenery appears only in this decorative object. |
-| `encrypted.png` | Opaque abstract patterned amber object for encrypted data, with no readable contents. Selected concept 01. |
+| `encrypted.png` | Refined angular amber polyhedron with abstract filaments, matching the locked crystal in selected concept 01. The lock remains precise SVG. Replaces the rounded initial object. |
 | `fragments.png` | Matching separate abstract facets, reused in encryption and recovery. Selected concept 01. Counts are symbolic, not a recovery threshold. |
+| `recovered.png` | Reassembled document-shaped encrypted glass, matching concept 01's recovery silhouette. No readable contents; the SVG verification symbol and subsequent local decryption/document steps carry the meaning. |
+| `crystal-texture.png` | Clean near-black burgundy material with fine amber veins, used behind the two process illustrations and product edge. No embedded text or objects. |
 | `courtyards.png` | Third section of concept 03 only: three distinct workspaces, equal golden connections, sandstone courtyards at sunset. |
 | `valley.png` | Selected concept 01's closing valley and amber formations, dark left foreground. |
 
@@ -65,7 +67,11 @@ The three object masters preserve true alpha. No generated mark is used.
 courtyards retain all three workspaces; mobile uses the complete wider scene.
 Mobile fox composition removes the left text space while retaining the fox's
 head, feet and tail. Exports are AVIF/WebP/JPEG at responsive widths; transparent
-objects are WebP. JPEG is the scene fallback. `asset-manifest.json` records every
+objects are WebP. JPEG is the scene fallback. The product crystal is exported at
+768×1152 to remain crisp at its larger edge placement; its master is unchanged.
+`paper-grain.svg` is a code-authored subtle paper texture. The precise gold
+flow paths and document outlines are original HTML/SVG, with no generated labels.
+`asset-manifest.json` records every
 local master/export/icon/CSS/JS digest and size; theme assets have their own
 unchanged manifest. The original masters are not copied to public output.
 
@@ -75,6 +81,13 @@ original [Lucide](https://github.com/lucide-icons/lucide) geometry pinned at
 `a630cec77eac6568b989e87e4947a8bfe45caacd`; original SVGs, Git blob/source records
 and the full ISC/Feather MIT notice are in `assets/icons/lucide/`. Rendering changes
 only the SVG root attributes for size, inherited colour and decorative semantics.
+
+The fidelity revision starts from published Cloud commit
+`5bfbf975b01e14135160937f22edeb4a476f4c43`. The new encrypted object and fragments
+replace the initial versions; their previous masters/prompts remain in that Git
+history. `generation.json` records the replacement lineage and all new prompts.
+Hero, courtyards and valley master bytes are unchanged. Their composition,
+display proportions and HTML transitions are revised to match selected concept 01.
 
 ## Byte and source verification
 
