@@ -1,4 +1,7 @@
-# Website verification — 30 October 2026
+# Initial website review — 30 October 2026
+
+This records the pre-publication review. The subsequent owner-authorized release
+and live checks are recorded in [PR #21](https://github.com/VOLPAROSSA/volparossa-cloud/pull/21).
 
 The build was reviewed against selected Cloud concept 01, the original crystal
 fox/glass in 02, the third courtyard section only in 03, the original logo and

@@ -50,5 +50,5 @@ caption. The image is an example, not a live upload form or integration evidence
 The companion homepage change adds only a Cloud reading-path card linking to
 README, architecture, uploads, private-file recovery, local reads, original Files
 UI and the evidence section. Technical Markdown stays in Cloud. It does not
-publish the Cloud site or enable its application registry flag. Until that card
-is live, Cloud buttons deliberately target the existing generic `/docs/` route.
+publish the Cloud site or enable its application registry flag. Homepage PR #9 has now published that card; the live `#cloud` anchor was checked
+before switching Cloud buttons to the specific `/docs/#cloud` entrance.

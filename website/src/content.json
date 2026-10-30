@@ -4,7 +4,7 @@
   "canonical": "https://volparossa.org/volparossa-cloud/",
   "base_path": "/volparossa-cloud/",
   "repository": "https://github.com/VOLPAROSSA/volparossa-cloud",
-  "documentation": "https://volparossa.org/docs/",
+  "documentation": "https://volparossa.org/docs/#cloud",
   "core": "https://volparossa.org/volparossa/",
   "reviewed_on": "2026-10-30",
   "source_commit": "468e29f3ff1e183bfb67830e9fdfb893807e8f9b",

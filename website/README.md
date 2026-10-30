@@ -35,7 +35,7 @@ python3 website/scripts/check_site.py --production --output website/dist/volparo
 Its canonical, Open Graph URL and sitemap use
 `https://volparossa.org/volparossa-cloud/`. It contains no CNAME or root-domain
 robots policy. Production builds use indexable metadata only when explicitly
-selected; this task does not merge or publish them.
+selected; publication is controlled by the separate manual workflow below.
 
 ## Shared theme and content maintenance
 
@@ -57,10 +57,10 @@ trial pins, review date and destinations. Update the review date only when
 reviewing the underlying evidence. The existing Cloud trial was not rerun for
 this website. See [CONTENT.md](CONTENT.md) and [ASSETS.md](ASSETS.md).
 
-Documentation buttons currently use the live `https://volparossa.org/docs/`.
-A small independent homepage PR adds a Cloud reading path. Only after that
-change is published and verified may these buttons use `/docs/#cloud`. The
-application publication flag remains false until a separate live release check.
+Documentation buttons use the verified live Cloud reading path at
+`https://volparossa.org/docs/#cloud`. Homepage PR #9 published the maintained
+source links before this release. The application publication flag is enabled
+separately after the Cloud production page passes its live release check.
 
 ## Optional browser QA
 
@@ -119,4 +119,5 @@ source, DNS, CNAME or domain route was changed. Existing configuration is checke
 without automatic enablement during the future manual publication workflow.
 After approval, merge and dispatch on main; verify the deployed project path and
 only then update the homepage application's published flag in a separate change.
-No merge or dispatch was performed for this delivery.
+The owner authorized publication after reviewing the prepared PR. Release results
+and the live verification are recorded in PR #21 and the associated Actions runs.
