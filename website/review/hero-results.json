@@ -1,0 +1,167 @@
+{
+  "checkedAt": "2026-10-31T17:40:39.962Z",
+  "results": [
+    {
+      "engine": "chromium",
+      "width": 320,
+      "height": 740,
+      "heroHeight": 714.953125,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "height": 844,
+      "heroHeight": 745.703125,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 768,
+      "height": 1024,
+      "heroHeight": 1007.546875,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "height": 900,
+      "heroHeight": 900,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 1920,
+      "height": 1080,
+      "heroHeight": 1080,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 2560,
+      "height": 1440,
+      "heroHeight": 1440,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 3440,
+      "height": 1440,
+      "heroHeight": 1440,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "chromium",
+      "width": 844,
+      "height": 390,
+      "heroHeight": 720,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "type": "no-js",
+      "passed": true
+    },
+    {
+      "type": "text-200-percent",
+      "passed": true
+    },
+    {
+      "engine": "firefox",
+      "width": 390,
+      "height": 844,
+      "heroHeight": 745.7833251953125,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "firefox",
+      "width": 1440,
+      "height": 900,
+      "heroHeight": 900,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "firefox",
+      "width": 1920,
+      "height": 1080,
+      "heroHeight": 1080,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    },
+    {
+      "engine": "firefox",
+      "width": 2560,
+      "height": 1440,
+      "heroHeight": 1440,
+      "overflow": false,
+      "headerOverlap": false,
+      "imageLoaded": true,
+      "imageFit": "contain",
+      "objectPosition": "100% 50%",
+      "imageInside": true
+    }
+  ],
+  "accessibility": [
+    {
+      "width": 390,
+      "violations": []
+    },
+    {
+      "width": 1440,
+      "violations": []
+    }
+  ]
+}

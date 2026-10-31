@@ -1,5 +1,45 @@
 # Cloud concept fidelity review
 
+## Hero correction — 31 October 2026
+
+The owner's final clarification requests a generous, screen-filling hero and the
+fox's forward-moving anatomy from the concept. Starting from published commit
+`2a61e1a5a3f1a8b5b5aa1ae4192972b4bd16e527`, the hero master was edited to remove
+the false plume between the legs, retain one main tail, and separate the natural
+leg shapes. The exact edit prompt and reference lineage are in
+[ASSETS.md](ASSETS.md) and [masters/generation.json](masters/generation.json).
+
+The desktop hero now fills the viewport with content-safe minimum heights.
+Contained, right-aligned artwork preserves the feet on tall and wide screens;
+mobile keeps the complete fox below the copy. All other sections retain their
+published artwork and styling. The desktop/mobile full-page screenshots below
+have been refreshed, together with the hero detail views:
+
+[1440px hero](review/firefox-1440-top.webp) ·
+[2560px hero](review/hero-firefox-2560.webp) ·
+[390px hero](review/firefox-390-top.webp)
+
+Targeted checks passed in Chromium at 320, 390, 768, 1440, 1920, 2560 and 3440px,
+plus 844×390 landscape, no JavaScript and 200% text enlargement. Firefox passed
+at 390, 1440, 1920 and 2560px. All loaded hero images remain contained with no
+horizontal overflow or header overlap. Desktop hero heights match the viewport
+at 1440×900, 1920×1080, 2560×1440 and 3440×1440. Actual Firefox desktop/mobile
+screenshots were inspected; zero axe A/AA and 2.1 AA violations were reported at
+390 and 1440px. [Current browser results](review/hero-results.json).
+
+A fresh mobile Lighthouse run reports **96 performance, 100 accessibility and
+100 best practices**, with LCP 2.7s, blocking time 20ms and CLS 0. These are local
+lab measurements using the same tool and throttling described below.
+[Current Lighthouse metrics](review/hero-lighthouse-summary.json).
+Preview and production builds pass the offline checker and `git diff --check`;
+CSS/JS totals **13,885 bytes gzip**. Hero and social derivatives, asset hashes
+and provenance were regenerated from the corrected master.
+
+## Previous full-page review (PR #22)
+
+The broader checks and measurements below describe the preceding all-sections
+revision. They were not rerun for this narrowly scoped hero correction.
+
 The owner requested a closer match to the selected Crystal Archive concept after
 publication of PR #21. This revision starts from published Cloud commit
 `5bfbf975b01e14135160937f22edeb4a476f4c43`. Both supplied briefs and the selected
@@ -16,7 +56,7 @@ section below the fold. The finished desktop/mobile Firefox renders are retained
 
 | Section | Fidelity correction |
 | --- | --- |
-| [Hero](review/firefox-1440-top.webp) | Shorter panoramic composition, larger shared brand, full fox silhouette and quieter left copy area. |
+| [Hero](review/firefox-1440-top.webp) | Larger shared brand, full fox silhouette and quieter left copy area. The compact height was subsequently replaced by the screen-filling treatment above. |
 | [OpenCloud](review/firefox-1440-opencloud.webp) | Larger original brand, central real interface, full-height amber landscape crystal and soft paper-to-dark edge transition. |
 | [Encrypt](review/firefox-1440-how-it-works.webp) | Luminous angular encrypted crystal and matching facets, fine SVG light paths, textured burgundy background and a shaded document outline. |
 | [Participants](review/firefox-1440-participants.webp) | Title on a feathered parchment transition over the wide courtyard scene, followed by a compact three-part explanation band. |
@@ -24,7 +64,7 @@ section below the fold. The finished desktop/mobile Firefox renders are retained
 | [Development](review/firefox-1440-development.webp) | Compact introduction beside proof and unfinished-work columns. Owner-local recovery limitations stay visible. Supplementary evidence/privacy scope uses a native disclosure. |
 | Closing/footer | Shallower valley panorama, a single-line desktop headline and tighter shared footer spacing. |
 
-At 1440px, the page is approximately 16% shorter than the original 5339px render,
+At 1440px, that revision was approximately 16% shorter than the original 5339px render,
 closer to the selected reference's overall rhythm. The real attributed upstream
 interface, shared navigation order and explicit development limitations remain
 intentional differences from the concept's invented interface and abbreviated
