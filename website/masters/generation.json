@@ -1,17 +1,18 @@
 [
   {
     "id": "hero",
-    "refs": [
-      "02-cloud-crystal-original.png"
-    ],
     "transparent": false,
-    "prompt": "Create a clean cinematic website HERO ARTWORK, landscape 1536 x 1024. Use ONLY the FIRST (top) section of the supplied Crystal Archive reference for the art direction. Recreate its majestic natural-proportioned fox sculpted from translucent glowing amber glass facets, whole body sitting elegantly in the RIGHT half, ears, paws and magnificent sweeping faceted tail all fully inside the frame. Fox looks left, strong realistic fox anatomy, sophisticated fine glass craftsmanship, very dimensional glass with golden refracting edges and scattered leaf-like glass facets extending toward center. Near-black deep burgundy background, restrained tiny golden light points and a few delicate circular celestial engraving arcs behind fox. LEFT 42% broadly dark quiet negative space for later HTML copy; do not fill this area with crystals. Leave dark negative space above the fox for later website navigation. Match the selected reference closely: sumptuous warm amber clear glass, rich dark burgundy shadows, luminous golden delicate refractions. No text, no letters, no title, no words, no logos, no buttons, no UI, no screenshot, no borders, no webpage. Avoid low-poly cartoon, cryptocurrency coins, aggressive armor, blue light. This must be one pristine full-bleed illustration, NOT a multi-section web design.",
-    "generated_on": "2026-10-30",
+    "prompt": "EDIT the FIRST supplied clean hero artwork. The second and third supplied web concept images are ANATOMY/POSE REFERENCES only: use ONLY their top hero fox, never reproduce any web text or interface. Preserve the first artwork's fox head, amber transparent faceted glass material, tiny scenic reflections, dark burgundy background, delicate celestial circles, and the single main sweeping faceted tail trailing LEFT from the rump. Correct the FOX'S LOWER BODY AND LEGS to match the poised, forward-striding fox in the concept, NOT the currently seated pose. One front leg extends diagonally forward and down to a neat small fox paw at lower right; the other front leg is bent/lifted naturally under the chest, clearly separate. The hind legs connect anatomically to the rear haunch under the horizontal torso, one visible flexed hind leg and the far one partly occluded. Natural slim fox legs, no extra joints, no massive feet, no extra limbs. VERY IMPORTANT: entirely REMOVE the conspicuous second bushy tail / broad leaf-shaped plume that currently sits under the belly and between the legs in the lower-right quadrant. Replace that false second tail with DARK NEGATIVE SPACE so the four-legged anatomy reads clearly. Exactly ONE tail total, attached to the rear rump and flowing left into the long existing trail of glass facets. No tail curls around or between the legs, no second pointed appendage under the abdomen. Match the reference's graceful horizontal torso and slender diagonal/bent leg silhouette; no upright seated fox. Whole head, ears, all paws and the one tail stay inside the frame with at least 5% margins. Keep the fox predominantly on the RIGHT and the LEFT 40% calm and dark for real HTML copy. Preserve wide landscape canvas 1536x1024 and all unrelated scene design. Clean finished website hero artwork only, no text, logo, UI, border, labels, buttons or mockup. Photorealistic translucent amber sculpture, same sophisticated luminous glass craftsmanship.",
+    "generated_on": "2026-10-31",
     "tool": "OpenAI image generation",
     "master": "hero.png",
     "references": [
+      "hero.png at 2a61e1a5a3f1a8b5b5aa1ae4192972b4bd16e527",
+      "01-cloud-crystal-refined-SELECTED.png",
       "02-cloud-crystal-original.png"
-    ]
+    ],
+    "generated_file": "exec-d4fc1724-2077-478b-bbfe-992bf3511d1c.png",
+    "supersedes_master_from_commit": "2a61e1a5a3f1a8b5b5aa1ae4192972b4bd16e527"
   },
   {
     "id": "courtyards",

@@ -86,7 +86,7 @@ The fidelity revision starts from published Cloud commit
 `5bfbf975b01e14135160937f22edeb4a476f4c43`. The new encrypted object and fragments
 replace the initial versions; their previous masters/prompts remain in that Git
 history. `generation.json` records the replacement lineage and all new prompts.
-Hero, courtyards and valley master bytes are unchanged. Their composition,
+Courtyards and valley master bytes are unchanged. Their composition,
 display proportions and HTML transitions are revised to match selected concept 01.
 
 ## Byte and source verification
@@ -97,3 +97,17 @@ is reviewable without accidentally publishing the mockups or attached brief.
 The builder checks every vendored theme hash; the offline checker additionally
 checks public paths, image presence, metadata and output separation. Fonts and
 all imagery are local. No image service, tracker or font CDN runs in the browser.
+
+## Hero anatomy correction — 31 October 2026
+
+The owner clarified that the hero should be generous and fill the desktop
+viewport, and that the fox should follow the concept's leg pose without the
+extra tail-shaped object beneath its belly. Image generation edited the existing
+clean hero against the top fox in concepts 01/02: a forward-striding stance,
+separate natural legs, one main tail flowing left, and clear space beneath the
+body. The previous master remains at commit
+`2a61e1a5a3f1a8b5b5aa1ae4192972b4bd16e527`; the exact edit prompt and lineage
+are in `masters/generation.json`. All desktop/mobile encodes and the social
+image were regenerated. Existing crop boxes preserve the ears, paws and tail.
+The hero uses `contain`, right-centred placement and a viewport-based desktop
+minimum height; mobile keeps its content-first uncropped composition.
