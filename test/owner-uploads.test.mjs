@@ -14,6 +14,7 @@ import { openOwnerUploads } from '../src/owner-uploads.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
 import { recoverySpaceId, recoveryResourceId } from '../src/private-resource-id.mjs';
 import { restorePrivateFile } from '../src/private-file.mjs';
+import { openUploadMaintenance } from '../src/storage-upload-maintenance.mjs';
 import { checkedSDK } from './fixtures/checked-sdk.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -31,7 +32,7 @@ function base() {
     async close() {},
   };
 }
-async function fixture(t) {
+async function fixture(t, { withMaintenance = false } = {}) {
   await mkdir(join(ROOT, 'build'), { recursive: true, mode: 0o700 });
   const root = await mkdtemp(join(ROOT, 'build', 'upload-test-'));
   await chmod(root, 0o700);
@@ -41,12 +42,26 @@ async function fixture(t) {
   await writeFile(storageConfig, JSON.stringify({ version: 1, providers: [1, 2, 3].map(n => ({
     key: String(n).repeat(64), grant: join(root, `synthetic-grant-${n}`),
   })) }), { mode: 0o600 });
+  if (withMaintenance) for (const number of [1, 2, 3]) {
+    await writeFile(join(root, `synthetic-grant-${number}`), `synthetic grant ${number}`, { mode: 0o600 });
+  }
   const remote = new Map(), calls = [];
-  let backend, server, failure = false, hold;
+  let backend, server, maintenance, failure = false, hold, enrollmentFailure = false;
+  let clock = Math.floor(Date.now() / 1000);
+  const policy = { version: 2, expiresAt: clock + 3600, maxSessions: 1, maxChargedBytes: 1024 ** 2,
+    perArchiveMaxChargedBytes: 1024 ** 2, fromProviderKey: '1'.repeat(64), lifetimeSeconds: 600,
+    renewBeforeSeconds: 900, maximumTurnBytes: 1048576, existing: [] };
   const storageFactory = async path => {
     const config = JSON.parse(await readFile(path));
     assert.equal(config.providers.length, 3);
     assert.equal(Object.hasOwn(config, 'copies'), false);
+    let stop;
+    const storage = async () => {
+      const receipt = JSON.parse(await readFile(join(path, '../bundle/receipt.json')));
+      return { logical_ciphertext_bytes: receipt.cipher_bytes,
+        physical_payload_charge_upper_bound: 2 * receipt.cipher_bytes,
+        fully_redundant_from_retained_receipts: true };
+    };
     return {
       async create(request) {
         calls.push(['create', path]);
@@ -55,9 +70,9 @@ async function fixture(t) {
         assert.equal(hash(cipher), request.sha256);
         assert.equal(cipher.includes(BODY), false);
         await mkdir(config.stateDirectory, { mode: 0o700 });
-        return { status: 'complete', local_process_joined: true };
+        return { status: 'complete', local_process_joined: true, storage: await storage() };
       },
-      async status() { calls.push(['status', path]); return { status: 'complete', local_process_joined: true }; },
+      async status() { calls.push(['status', path]); return { status: 'complete', local_process_joined: true, storage: await storage() }; },
       async deposit(request, { signal }) {
         calls.push(['deposit', path]);
         assert.equal(request.alreadyEncrypted, true);
@@ -65,7 +80,7 @@ async function fixture(t) {
         if (failure) return { status: 'incomplete', local_process_joined: true };
         remote.set(path, await readFile(request.input));
         return { status: 'complete', local_process_joined: true,
-          storage: { fully_redundant_from_retained_receipts: true } };
+          storage: await storage() };
       },
       async restore(request) {
         calls.push(['restore', path]);
@@ -73,18 +88,38 @@ async function fixture(t) {
         await writeFile(request.output, remote.get(path), { mode: 0o600, flag: 'wx' });
         return { status: 'complete', restore_verified: true, local_process_joined: true };
       },
+      async enrollMaintenance(request) {
+        calls.push(['enroll', path, request]);
+        if (enrollmentFailure) return { status: 'failed', local_process_joined: true };
+        await mkdir(request.enrollment, { mode: 0o700 });
+        await writeFile(join(request.enrollment, 'enrollment.json'), JSON.stringify({ enrollment: {
+          version: 1, archive: config.stateDirectory, expires: request.authorizationExpiresAt,
+          maximum_charged: request.maximumChargedBytes, lifetime: request.lifetimeSeconds,
+          renew_before: request.renewBeforeSeconds, maximum_turn: request.maximumTurnBytes,
+          source: [...Buffer.from(request.fromProviderKey, 'hex')],
+          providers: request.providers.map(provider => [...Buffer.from(provider.key, 'hex')]),
+          grants: await Promise.all(request.providers.map(async provider => (await readFile(provider.grant)).toString('hex'))),
+        }, signature: 'synthetic core contract only' }), { mode: 0o600 });
+        return { status: 'complete', local_process_joined: true };
+      },
+      async maintenanceStatus() { return { status: 'complete', local_process_joined: true }; },
+      async startMaintenance() { calls.push(['start', path]); return { done: new Promise(resolve => { stop = resolve; }) }; },
+      async close() { stop?.(); },
     };
   };
   const config = { directory, space: SPACE, storageConfig, workDirectory, maxFileBytes: 1024 ** 2 };
   async function start() {
-    backend = await openOwnerUploads(config, { base: base(), storageFactory });
+    if (withMaintenance) maintenance = await openUploadMaintenance(policy, { storageFactory, now: () => clock });
+    backend = await openOwnerUploads(config, { base: base(),
+      storageFactory: maintenance?.storageFactory ?? storageFactory, ...(maintenance ? { maintenance } : {}) });
+    await maintenance?.activate();
     server = await startPrivateDavServer({ backend, bearerToken: TOKEN, recoveryWeb: {
       assetsFactory: async () => new Map([['/', { data: Buffer.from('Synthetic public asset'), contentType: 'text/plain' }]]),
     } });
   }
   async function stop() {
-    try { await server?.close(); } finally { await backend?.close(); }
-    server = undefined; backend = undefined;
+    try { await server?.close(); } finally { try { await backend?.close(); } finally { await maintenance?.close(); } }
+    server = undefined; backend = undefined; maintenance = undefined;
   }
   t.after(async () => { await stop(); await rm(root, { recursive: true }); });
   const request = (path, method = 'GET', body, headers = {}) => fetch(server.origin + path, {
@@ -93,8 +128,54 @@ async function fixture(t) {
   const filePath = name => `/dav/spaces/${recoverySpaceId(SPACE)}/${encodeURIComponent(name)}`;
   return { root, directory, workDirectory, config, remote, calls, start, stop, request, filePath, storageFactory,
     get backend() { return backend; }, get origin() { return server.origin; },
+    get maintenance() { return maintenance; }, policy, set clock(value) { clock = value; },
+    set enrollmentFailure(value) { enrollmentFailure = value; },
     set failure(value) { failure = value; }, set hold(value) { hold = value; } };
 }
+
+test('v2 actual encrypted HTTP upload publishes only after finite enrollment; restart/expiry preserve readable data',
+  { timeout: 90000 }, async t => {
+    const f = await fixture(t, { withMaintenance: true });
+    await f.start();
+    assert.equal((await f.request(f.filePath('managed.txt'), 'PUT', BODY)).status, 201);
+    assert.deepEqual(f.calls.map(([operation]) => operation), ['create', 'deposit', 'enroll', 'start']);
+    const id = (await readdir(f.directory)).find(name => name.startsWith('object-'));
+    const object = join(f.directory, id);
+    const intent = await readFile(join(object, 'MAINTENANCE.json'));
+    assert.equal(JSON.parse(intent).expiresAt, f.policy.expiresAt);
+    assert.equal(f.calls.find(([operation]) => operation === 'enroll')[2].authorizationExpiresAt, f.policy.expiresAt);
+    await f.stop();
+    await rm(join(object, 'bundle/file.pgp'));
+    f.clock = f.policy.expiresAt + 1;
+    await f.start();
+    assert.equal((await f.maintenance.status()).sessions[0].state, 'expired');
+    assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
+    assert.deepEqual(Buffer.from(await (await f.request(f.filePath('managed.txt'))).arrayBuffer()), BODY);
+    assert.equal((await f.request(f.filePath('not-authorized.txt'), 'PUT', BODY)).status, 503);
+    assert.deepEqual(await readFile(join(object, 'MAINTENANCE.json')), intent);
+    assert.equal(f.calls.filter(([operation]) => operation === 'enroll').length, 1);
+    assert.equal(f.calls.filter(([operation]) => operation === 'deposit').length, 1);
+    assert.equal(f.calls.filter(([operation]) => operation === 'restore').length, 1);
+  });
+
+test('successful deposit without confirmed enrollment stays pending and reserves its original cap across retry',
+  { timeout: 90000 }, async t => {
+    const f = await fixture(t, { withMaintenance: true });
+    await f.start(); f.enrollmentFailure = true;
+    assert.equal((await f.request(f.filePath('pending-managed.txt'), 'PUT', BODY)).status, 503);
+    assert.equal((await f.request(f.filePath('pending-managed.txt'))).status, 404);
+    assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
+    const id = (await readdir(f.directory)).find(name => name.startsWith('object-'));
+    const intent = await readFile(join(f.directory, id, 'MAINTENANCE.json'));
+    await assert.rejects(lstat(join(f.directory, id, 'READY.json')), { code: 'ENOENT' });
+    await f.stop(); await f.start();
+    assert.equal(f.calls.filter(([operation]) => operation === 'enroll').length, 1);
+    f.enrollmentFailure = false;
+    assert.equal((await f.request(f.filePath('pending-managed.txt'), 'PUT', BODY)).status, 201);
+    assert.equal(f.calls.filter(([operation]) => operation === 'create').length, 1);
+    assert.equal(new Set(f.calls.map(([, config]) => config)).size, 1);
+    assert.deepEqual(await readFile(join(f.directory, id, 'MAINTENANCE.json')), intent);
+  });
 
 test('owner upload -> encrypted core CONTRACT storage -> committed catalog -> restart -> verified download',
   { timeout: 90000 }, async t => {
@@ -306,11 +387,11 @@ test('foreground owner and supervised lock join cleanly after real process-group
     }
   });
 
-test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then reads through encrypted storage CONTRACT', {
+for (const withMaintenance of [false, true]) test(`actual pinned OpenCloud SDK uploads and resolves returned file ID, then reads through encrypted storage CONTRACT${withMaintenance ? ' with finite automatic enrollment' : ''}`, {
   skip: !process.env.VOLPAROSSA_CLOUD_WEB_SDK && 'explicit pinned SDK staging required; no downloads', timeout: 90000,
 }, async t => {
   const { webdav } = await checkedSDK(process.env.VOLPAROSSA_CLOUD_WEB_SDK);
-  const f = await fixture(t);
+  const f = await fixture(t, { withMaintenance });
   await f.start();
   const client = webdav(f.origin, () => ({ Authorization: `Bearer ${TOKEN}` }));
   const space = { id: recoverySpaceId(SPACE), webDavPath: `spaces/${recoverySpaceId(SPACE)}`, driveType: 'project' };
@@ -321,6 +402,11 @@ test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then re
   assert.equal(created.name, name);
   assert.equal(created.id, recoveryResourceId([SPACE, name]));
   assert.equal(created.etag, `"vp-${hash(BODY)}"`);
+  if (withMaintenance) {
+    assert.deepEqual(f.calls.map(([op]) => op), ['create', 'deposit', 'enroll', 'start']);
+    assert.equal(f.calls[2][2].authorizationExpiresAt, f.policy.expiresAt);
+    assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
+  }
   // Original Files awaits Graph getDrive before refreshing its DAV listing.
   // checkedSDK above verified every packaged module, including this import.
   const { graph } = await import(pathToFileURL(join(process.env.VOLPAROSSA_CLOUD_WEB_SDK,
@@ -338,5 +424,6 @@ test('actual pinned OpenCloud SDK uploads and resolves returned file ID, then re
   assert.deepEqual(Buffer.from(read.body), BODY);
   await assert.rejects(client.putFileContents(space, { path: name, content: 'replacement', overwrite: true }),
     error => error.statusCode === 412);
-  assert.deepEqual(f.calls.map(([op]) => op), ['create', 'deposit', 'restore']);
+  assert.deepEqual(f.calls.map(([op]) => op), withMaintenance
+    ? ['create', 'deposit', 'enroll', 'start', 'restore'] : ['create', 'deposit', 'restore']);
 });

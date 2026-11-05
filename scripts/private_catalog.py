@@ -37,7 +37,7 @@ def payload(encoded):
     value = FILE['json_value'](encoded)
     require(isinstance(value, dict) and set(value) == {'version', 'kind', 'entries'}
         and value['version'] == 1 and value['kind'] == 'volparossa-cloud-private-catalog-index'
-        and isinstance(value['entries'], list) and 1 <= len(value['entries']) <= 256, 'CATALOG_INVALID')
+        and isinstance(value['entries'], list) and len(value['entries']) <= 256, 'CATALOG_INVALID')
     return value
 
 

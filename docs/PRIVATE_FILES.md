@@ -173,10 +173,11 @@ completion status or cleanup evidence. A null returned wire outcome means only
 that none was observed; read stage alone identifies no remote cause. In v10,
 `before_challenge` and `in_challenge` remain whole-boundary timing buckets.
 Deadlines, retries, owner publication, recovery and pending-upload behavior remain
-unchanged. Retained maintenance branches remain separate pending integration.
+unchanged. This draft combines the current diagnostic policy with finite owner maintenance;
+the actual combined peer lifecycle remains unproved.
 
-The vendored SDK is byte-identical to accepted Image
-`78cc1d6cc7012ac64bbd07408990b63ed025d127`, with all three source files bound by
+The vendored SDK is byte-identical to the published Image draft merge
+`770a23fef01cb4cc69303a433b31b9df0d26b44e`, with all three source files bound by
 `third_party/volparossa-image-source.json`. Its helper and license bytes are unchanged.
 The focused `test/storage-deposit-diagnostics.test.mjs` is designed to exercise
 the actual Cloud consumer, default SDK and joined synthetic Node child. It compares
