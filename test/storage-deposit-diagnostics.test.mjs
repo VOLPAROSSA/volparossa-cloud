@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Actual Cloud/default-adapter/child boundaries with synthetic CLI reports and
-// opaque bytes. Not OpenPGP, real core signatures, custody or protected routes.
+// Hosted-only contracts: actual Cloud consumer/default SDK/owned Node child,
+// fabricated CLI reports and opaque synthetic bytes. No GPG, core or peer proof.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
@@ -10,342 +10,279 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { storePrivateFile } from '../src/private-file.mjs';
+import { run as runCloudFile } from '../scripts/cloud-file.mjs';
 
 const KEYS = ['11'.repeat(32), '22'.repeat(32), '33'.repeat(32)];
 const CIPHER = Buffer.alloc(96, 0xa5);
-const DIAGNOSTICS = { version: 1, failures: [{ fragment_index: 1, copy_index: 0,
-  operation: 'append', stage: 'agent_terminal', category: 'agent_rejected',
-  agent_code: 'CONTENT_UNAVAILABLE' }], omitted_failures: 0 };
-
-function rawReport(diagnostics) {
+const SELECTORS = [
+  ['appendDiagnosticsV7', '--append-diagnostics-v7', 7],
+  ['flowAcquireDiagnosticsV8', '--flow-acquire-diagnostics-v8', 8],
+  ['tlsCloseDiagnosticsV9', '--tls-close-diagnostics-v9', 9],
+  ['challengeReadDiagnosticsV10', '--challenge-read-diagnostics-v10', 10],
+];
+function diagnostic(version) {
+  const failure = { fragment_index: 1, copy_index: 0, operation: 'append', stage: 'wire_receipt',
+    category: 'io', agent_code: null, agent_detail: null, agent_outcome: null };
+  if (version === 7) failure.agent_outcome = { status: 'observed',
+    detail: { phase: 'remote_receipt_read', category: 'io', deadline_scope: 'none' },
+    append_timing: { before_payload: 'under_1s', in_payload_write_flush: '1_to_5s', in_receipt_read: '90_to_120s' } };
+  if (version === 8) Object.assign(failure, { operation: 'reserve', stage: 'agent_ready', category: 'agent_rejected',
+    agent_code: 'CONTENT_UNAVAILABLE', agent_detail: { stage: 'stream_open', deadline_scope: 'none', tls_failure: null,
+      stream_failure: 'flow_acquire', challenge: null, flow_acquire: { rounds: 2,
+        first: { stage: 'helper_acquire', reason: 'helper_capacity' },
+        last: { stage: 'retirement_drain', reason: 'helper_cleanup_incomplete' } } } });
+  if (version === 9) Object.assign(failure, { stage: 'agent_terminal', agent_outcome: { status: 'observed',
+    detail: { phase: 'transport_tls_close', category: 'unavailable', deadline_scope: 'none' },
+    append_timing: null, tls_close_failure: 'read_io' } });
+  if (version === 10) Object.assign(failure, { stage: 'agent_ready', category: 'agent_rejected',
+    agent_code: 'CONTENT_UNAVAILABLE', agent_detail: { stage: 'challenge', deadline_scope: 'operation',
+      tls_failure: null, stream_failure: null, flow_acquire: null, challenge: { phase: 'challenge_read_verify',
+        before_challenge: '1_to_5s', in_challenge: '90_to_120s', read: { step: 'body_read', returned_outcome: null } } } });
+  return { version, failures: [failure], omitted_failures: 0 };
+}
+function rawReport(operation, diagnostics) {
   return {
-    operation: 'private_storage_fragments_deposit', operation_complete: false,
+    operation: `private_storage_fragments_${operation}`,
+    ...(operation === 'deposit' ? { operation_complete: false } : {}),
     logical_ciphertext_bytes: 96, fragment_count: 3, copies_per_fragment: 2,
-    distinct_provider_identities: 3, reserved_payload_bytes: 0,
-    committed_payload_bytes: 0, uncertain_payload_bytes: 192,
-    physical_payload_charge_upper_bound: 192, metadata_overhead_measured: false,
-    expired_copies_remain_charged: true, fragments_with_confirmed_unexpired_copy: 0,
-    fully_redundant_from_retained_receipts: false, current_remote_availability_proven: false,
-    independent_failure_domains_proven: false, network_contribution_credit: false,
-    automatic_repair: false, automatic_handoff: false, read_consumes_archive: false,
-    erasure_coding: false, owner_signature_verified: true,
+    distinct_provider_identities: 3, reserved_payload_bytes: 0, committed_payload_bytes: 0,
+    uncertain_payload_bytes: 192, physical_payload_charge_upper_bound: 192,
+    metadata_overhead_measured: false, expired_copies_remain_charged: true,
+    fragments_with_confirmed_unexpired_copy: 0, fully_redundant_from_retained_receipts: false,
+    current_remote_availability_proven: false, independent_failure_domains_proven: false,
+    network_contribution_credit: false, automatic_repair: false, automatic_handoff: false,
+    read_consumes_archive: false, erasure_coding: false, owner_signature_verified: true,
     providers: KEYS.map(provider_key => ({ provider_key, physical_payload_charge_upper_bound: 64 })),
     fragments: KEYS.map((_, index) => ({ index, offset: index * 32, ciphertext_bytes: 32,
-      confirmed_unexpired_copies: 0, copies: [0, 1].map(copy => ({
-        provider_key: KEYS[(index + copy) % 3], charge: 'uncertain',
-      })) })),
+      confirmed_unexpired_copies: 0, copies: [0, 1].map(copy => ({ provider_key: KEYS[(index + copy) % 3], charge: 'uncertain' })) })),
     ...(diagnostics === undefined ? {} : { deposit_diagnostics: diagnostics }),
-    private_error: 'PRIVATE RAW REPORT MUST NEVER ESCAPE',
+    private_error: 'PRIVATE-REPORT-CANARY /private/owner',
   };
 }
-
-async function fixture(t, diagnostics) {
-  const root = await mkdtemp(join(tmpdir(), 'cloud-deposit-contract-'));
+async function fixture(t, configChanges = {}, operation = 'deposit') {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-diagnostic-contract-'));
   await chmod(root, 0o700);
-  const server = createServer(connection => connection.destroy());
   const socket = join(root, 'control.sock');
+  const server = createServer(connection => connection.destroy());
   server.listen(socket); await once(server, 'listening'); await chmod(socket, 0o600);
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
     await rm(root, { recursive: true });
   });
-  const state = join(root, 'journal'); await mkdir(state, { mode: 0o700 });
+  const state = join(root, 'journal');
+  if (operation !== 'create') await mkdir(state, { mode: 0o700 });
   const bundle = join(root, 'bundle'); await mkdir(bundle, { mode: 0o700 });
   await writeFile(join(bundle, 'file.pgp'), CIPHER, { mode: 0o600 });
   await writeFile(join(bundle, 'receipt.json'), JSON.stringify({ version: 2,
-    kind: 'volparossa-cloud-private-file', cipher_file: 'file.pgp', cipher_bytes: CIPHER.length,
+    kind: 'volparossa-cloud-private-file', cipher_file: 'file.pgp', cipher_bytes: 96,
     cipher_sha256: createHash('sha256').update(CIPHER).digest('hex'), encryption: 'OpenPGP-AES256',
     source_consistency: 'owner-upload-snapshot',
   }), { mode: 0o600 });
-  for (const name of ['identity', 'passphrase']) await writeFile(join(root, name), 'synthetic', { mode: 0o600 });
+  for (const name of ['identity', 'passphrase', 'grant0', 'grant1', 'grant2']) {
+    await writeFile(join(root, name), 'synthetic-private-fixture-only', { mode: 0o600 });
+  }
+  const reply = join(root, 'reply.json');
+  const argv = join(root, 'argv.private.jsonl');
   const binary = join(root, 'synthetic-core');
+  // The sidecar belongs only to this private disposable test fixture; no raw
+  // argv, private path or report is exposed through the Cloud result.
   await writeFile(binary, `#!${process.execPath}
-if (process.argv[6] !== 'deposit') process.exit(17);
-process.stdout.write(${JSON.stringify(JSON.stringify(rawReport(diagnostics)))});
-process.exitCode = 1;
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[4] !== ${JSON.stringify(operation)}) process.exit(17);
+fs.appendFileSync(${JSON.stringify(argv)}, JSON.stringify(args) + '\\n', { mode: 0o600 });
+const reply = JSON.parse(fs.readFileSync(${JSON.stringify(reply)}, 'utf8'));
+process.stdout.write(reply.text === undefined ? JSON.stringify(reply.raw) : reply.text);
+process.exitCode = reply.code;
 `, { mode: 0o700 });
   const config = join(root, 'core.json');
-  await writeFile(config, JSON.stringify({ version: 1, coreBinary: binary, controlSocket: socket,
+  const configuration = { version: 1, coreBinary: binary, controlSocket: socket,
     identity: join(root, 'identity'), passphraseFile: join(root, 'passphrase'), stateDirectory: state,
     providers: KEYS.map((key, index) => ({ key, grant: join(root, `grant${index}`) })),
-    fragmentBytes: 32, lifetimeSeconds: 600, deadlineMs: 3000,
-  }), { mode: 0o600 });
-  return { root, state, bundle, config };
+    fragmentBytes: 32, lifetimeSeconds: 600, deadlineMs: 3000, ...configChanges };
+  await writeFile(config, JSON.stringify(configuration), { mode: 0o600 });
+  return { root, state, bundle, config, configuration, argv,
+    reply: value => writeFile(reply, JSON.stringify(value), { mode: 0o600 }),
+    arguments: async () => (await readFile(argv, 'utf8')).trim().split('\n').map(line => JSON.parse(line)) };
 }
-
-test('default Cloud deposit carries only the validated optional diagnostic through the real child boundary', async t => {
-  const value = await fixture(t, DIAGNOSTICS);
-  const result = await storePrivateFile('deposit', value);
-  assert.equal(result.status, 'incomplete');
-  assert.equal(result.code, 'retained_operation_incomplete');
+async function originalMainStore(operation, value) {
+  // Readable, exact Cloud-main bdc9c914f4687f25396e23f322d5fa27e183ce8a SDK.
+  const source = new URL('./fixtures/core-storage-default-bdc9c914.mjs', import.meta.url);
+  const bytes = await readFile(source);
+  assert.equal(bytes.length, 20915);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),
+    'd274c294a4f7c500aac552629997487c79e67faaa89dddd1383309d7e58273b0');
+  const { CoreStorage } = await import(source.href);
+  const original = { ...value.configuration };
+  for (const [key] of SELECTORS) delete original[key];
+  await writeFile(value.config, JSON.stringify(original));
+  try { return await storePrivateFile(operation, value, { storageFactory: config => CoreStorage.open(config) }); }
+  finally { await writeFile(value.config, JSON.stringify(value.configuration)); }
+}
+function privateResult(result, value) {
   assert.equal(result.local_process_joined, true);
   assert.equal(result.remote_cleanup_confirmed, false);
-  assert.equal(result.storage.uncertain_payload_bytes, 192);
-  assert.deepEqual(result.storage.deposit_diagnostics, DIAGNOSTICS);
-  for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) {
+  for (const canary of [value.root, ...KEYS, 'PRIVATE-REPORT-CANARY', 'PRIVATE-DIAGNOSTIC-CANARY']) {
     assert.ok(!JSON.stringify(result).includes(canary));
   }
-  assert.equal((await lstat(value.state)).isDirectory(), true);
+}
+function frozen(value) {
+  if (value !== null && typeof value === 'object') {
+    assert.ok(Object.isFrozen(value));
+    for (const child of Object.values(value)) frozen(child);
+  }
+}
+
+test('Cloud absent and all-false selectors preserve exact main results and child argv for unsolicited diagnostics', async t => {
+  const modes = [{}, Object.fromEntries(SELECTORS.map(([key]) => [key, false]))];
+  const diagnostics = [undefined, null, {}, { raw: 'PRIVATE-DIAGNOSTIC-CANARY' },
+    { version: 1, failures: [], omitted_failures: 0 }, ...SELECTORS.map(([, , version]) => diagnostic(version)),
+    { version: 11, failures: [], omitted_failures: 0 }];
+  for (const configChanges of modes) {
+    const value = await fixture(t, configChanges);
+    for (const current of diagnostics) {
+      await value.reply({ raw: rawReport('deposit', current), code: 1 });
+      const actual = await storePrivateFile('deposit', value);
+      const baseline = await originalMainStore('deposit', value);
+      assert.deepEqual(actual, baseline); assert.equal(JSON.stringify(actual), JSON.stringify(baseline));
+      const args = await value.arguments(); assert.deepEqual(args.at(-2), args.at(-1));
+      assert.equal(args.at(-2).some(arg => SELECTORS.some(([, flag]) => arg === flag)), false);
+      assert.equal(Object.hasOwn(actual.storage, 'deposit_diagnostics'), false);
+      assert.equal(actual.status, 'incomplete'); assert.equal(actual.storage.uncertain_payload_bytes, 192);
+      privateResult(actual, value);
+    }
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+  }
+});
+
+test('Cloud default malformed JSON, accounting and exit errors match unchanged main without leaking diagnostic text', async t => {
+  const value = await fixture(t);
+  const invalidAccounting = rawReport('deposit', { raw: 'PRIVATE-DIAGNOSTIC-CANARY' });
+  invalidAccounting.physical_payload_charge_upper_bound++;
+  for (const reply of [{ text: 'PRIVATE-REPORT-CANARY', code: 1 }, { raw: invalidAccounting, code: 1 },
+    { raw: rawReport('deposit', diagnostic(10)), code: 0 }]) {
+    await value.reply(reply);
+    const actual = await storePrivateFile('deposit', value);
+    assert.deepEqual(actual, await originalMainStore('deposit', value));
+    assert.equal(actual.code, 'invalid_core_report'); assert.equal(actual.storage, null);
+    const args = await value.arguments(); assert.deepEqual(args.at(-2), args.at(-1));
+    privateResult(actual, value);
+  }
+});
+
+test('Cloud consumer and CLI forward each explicit selector through the actual default adapter and joined child', async t => {
+  for (const [key, flag, version] of SELECTORS) {
+    const value = await fixture(t, { [key]: true });
+    const expected = diagnostic(version);
+    await value.reply({ raw: rawReport('deposit', expected), code: 1 });
+    const result = await storePrivateFile('deposit', value);
+    const cli = await runCloudFile({ operation: 'deposit', config: value.config, bundle: value.bundle });
+    assert.deepEqual(result, cli); assert.equal(result.status, 'incomplete');
+    assert.equal(result.code, 'retained_operation_incomplete');
+    assert.deepEqual(result.storage.deposit_diagnostics, expected);
+    frozen(result.storage.deposit_diagnostics); privateResult(result, value);
+    assert.equal(result.storage.uncertain_payload_bytes, 192);
+    const args = await value.arguments(); assert.deepEqual(args[0], args[1]);
+    assert.deepEqual(args[0], ['--control-socket', value.configuration.controlSocket, 'storage', 'fragments', 'deposit',
+      '--state', value.state, flag, '--identity', value.configuration.identity, '--passphrase-file', value.configuration.passphraseFile,
+      '--input', join(value.bundle, 'file.pgp'), '--already-encrypted']);
+    const { deposit_diagnostics, ...accounting } = result.storage;
+    const baseline = await originalMainStore('deposit', value);
+    assert.deepEqual(accounting, baseline.storage); assert.deepEqual({ ...result, storage: accounting }, baseline);
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud create keeps every configured selector inactive and ignores malformed diagnostics exactly as main', async t => {
+  for (const [key] of SELECTORS) {
+    const value = await fixture(t, { [key]: true }, 'create');
+    await value.reply({ raw: rawReport('create', { raw: 'PRIVATE-DIAGNOSTIC-CANARY' }), code: 0 });
+    const actual = await storePrivateFile('create', value);
+    assert.deepEqual(actual, await originalMainStore('create', value));
+    assert.equal(actual.status, 'complete'); assert.equal(Object.hasOwn(actual.storage, 'deposit_diagnostics'), false);
+    const args = await value.arguments(); assert.deepEqual(args[0], args[1]);
+    assert.equal(args[0].some(arg => SELECTORS.some(([, flag]) => arg === flag)), false);
+    assert.equal(args[0].filter(arg => arg === '--provider-key').length, 3);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+    privateResult(actual, value);
+  }
+});
+
+test('Cloud selected deposits require exact version and closed fields without weakening custody or errors', async t => {
+  for (const [key, flag, version] of SELECTORS) {
+    const value = await fixture(t, { [key]: true });
+    // Establish that this fixture can actually return a valid selected report;
+    // a broken child must not make every negative case pass as a generic error.
+    const valid = diagnostic(version);
+    await value.reply({ raw: rawReport('deposit', valid), code: 1 });
+    const positive = await storePrivateFile('deposit', value);
+    assert.equal(positive.code, 'retained_operation_incomplete');
+    assert.deepEqual(positive.storage.deposit_diagnostics, valid);
+    privateResult(positive, value);
+    let childCalls = 1;
+    assert.equal((await value.arguments()).length, childCalls);
+    const bad = diagnostic(version); bad.failures[0].raw = 'PRIVATE-DIAGNOSTIC-CANARY';
+    const invalid = [undefined, null, bad, { ...diagnostic(version), version: 1 },
+      { ...diagnostic(version), version: version === 10 ? 9 : 10 }, { ...diagnostic(version), version: 11 }];
+    for (const current of invalid) {
+      await value.reply({ raw: rawReport('deposit', current), code: 1 });
+      const result = await storePrivateFile('deposit', value);
+      assert.equal(result.code, 'invalid_core_report'); assert.equal(result.storage, null);
+      const calls = await value.arguments();
+      assert.equal(calls.length, ++childCalls);
+      assert.equal(calls.at(-1)[7], flag);
+      privateResult(result, value);
+    }
+    assert.equal((await lstat(value.state)).isDirectory(), true);
+    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
+  }
+});
+
+test('Cloud v10 retains whole challenge buckets and nullable wire outcome without asserting a remote cause', async t => {
+  const value = await fixture(t, { challengeReadDiagnosticsV10: true });
+  for (const read of [null, { step: 'length_read', returned_outcome: 'io_eof' },
+    { step: 'body_read', returned_outcome: null }, { step: 'verification', returned_outcome: 'verification_rejected' }]) {
+    const current = diagnostic(10); current.failures[0].agent_detail.challenge.read = read;
+    await value.reply({ raw: rawReport('deposit', current), code: 1 });
+    const result = await runCloudFile({ operation: 'deposit', config: value.config, bundle: value.bundle });
+    assert.deepEqual(result.storage.deposit_diagnostics, current);
+    assert.equal(result.storage.deposit_diagnostics.failures[0].agent_detail.challenge.before_challenge, '1_to_5s');
+    assert.equal(result.storage.deposit_diagnostics.failures[0].agent_detail.challenge.in_challenge, '90_to_120s');
+    frozen(result.storage.deposit_diagnostics); privateResult(result, value);
+    assert.equal(result.status, 'incomplete');
+  }
+  const invalid = diagnostic(10); invalid.failures[0].agent_detail.challenge.phase = 'grant_write_flush';
+  await value.reply({ raw: rawReport('deposit', invalid), code: 1 });
+  const result = await storePrivateFile('deposit', value);
+  assert.equal(result.code, 'invalid_core_report'); assert.equal(result.storage, null);
+  privateResult(result, value);
+});
+
+test('Cloud configuration rejects mixed or nonboolean selectors before launching a child', async t => {
+  const value = await fixture(t);
+  for (const [key] of SELECTORS) for (const replacement of ['true', 1, null]) {
+    await writeFile(value.config, JSON.stringify({ ...value.configuration, [key]: replacement }));
+    await assert.rejects(storePrivateFile('deposit', value), { code: 'invalid_configuration' });
+  }
+  for (let first = 0; first < SELECTORS.length; first++) for (let second = first + 1; second < SELECTORS.length; second++) {
+    await writeFile(value.config, JSON.stringify({ ...value.configuration, [SELECTORS[first][0]]: true, [SELECTORS[second][0]]: true }));
+    await assert.rejects(storePrivateFile('deposit', value), { code: 'invalid_configuration' });
+  }
+  await assert.rejects(lstat(value.argv), { code: 'ENOENT' });
   assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
 });
 
-test('old Cloud deposit reports remain optional and malformed diagnostics never become public error strings', async t => {
-  const old = await fixture(t, undefined);
-  const result = await storePrivateFile('deposit', old);
-  assert.equal(result.status, 'incomplete');
-  assert.equal(Object.hasOwn(result.storage, 'deposit_diagnostics'), false);
-  const invalid = structuredClone(DIAGNOSTICS);
-  invalid.failures[0].agent_code = 'PRIVATE-PEER-ERROR';
-  const changed = await fixture(t, invalid);
-  const failed = await storePrivateFile('deposit', changed);
-  assert.equal(failed.status, 'failed');
-  assert.equal(failed.code, 'invalid_core_report');
-  assert.equal(failed.storage, null);
-  assert.ok(!JSON.stringify(failed).includes('PRIVATE-PEER-ERROR'));
-  assert.equal(failed.local_process_joined, true);
-  assert.equal((await lstat(changed.state)).isDirectory(), true);
-});
-
-test('Cloud retains v2 initial agent observations without changing ciphertext, journals or charges', async t => {
-  for (const detail of [null, { stage: 'provider_lookup', deadline_scope: 'operation' },
-    { stage: 'unobserved', deadline_scope: 'operation' },
-    { stage: 'tls_handshake', deadline_scope: 'exchange' },
-    { stage: 'challenge', deadline_scope: 'none' }]) {
-    const diagnostics = structuredClone(DIAGNOSTICS);
-    diagnostics.version = 2;
-    Object.assign(diagnostics.failures[0], { operation: 'reserve', stage: 'agent_ready', agent_detail: detail });
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.status, 'incomplete');
-    assert.equal(result.code, 'retained_operation_incomplete');
-    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
-    assert.equal(result.storage.uncertain_payload_bytes, 192);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud does not relabel terminal errors, accept impossible timeouts, or expose private detail', async t => {
-  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready',
-    agent_detail: { stage: 'tls_handshake', deadline_scope: 'none' } };
-  const failures = [{ ...good, stage: 'agent_terminal' }, { ...good, agent_code: 'unknown' },
-    { ...good, agent_code: 'CONTENT_BUSY', agent_detail: { stage: 'tls_handshake', deadline_scope: 'operation' } },
-    { ...good, agent_detail: { stage: 'provider_lookup', deadline_scope: 'exchange' } },
-    { ...good, agent_detail: { stage: 'unobserved', deadline_scope: 'none' } },
-    { ...good, agent_detail: { ...good.agent_detail, raw: 'PRIVATE-PEER-ERROR' } },
-    { ...good, agent_detail: 'PRIVATE-PEER-ERROR' }, { ...DIAGNOSTICS.failures[0] }];
-  for (const failure of failures) {
-    const value = await fixture(t, { version: 2, failures: [failure], omitted_failures: 0 });
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.status, 'failed');
-    assert.equal(result.code, 'invalid_core_report');
-    assert.equal(result.storage, null);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud v3 carries exact nullable TLS classes without changing ciphertext, accounting or outcome', async t => {
-  const details = [null, { stage: 'provider_lookup', deadline_scope: 'operation', tls_failure: null },
-    { stage: 'tls_handshake', deadline_scope: 'exchange', tls_failure: null },
-    ...[null, 'offer', 'configuration', 'handshake_deadline', 'authentication', 'tls_other', 'io']
-      .map(tls_failure => ({ stage: 'tls_handshake', deadline_scope: 'none', tls_failure }))];
-  for (const agent_detail of details) {
-    const diagnostics = { version: 3, failures: [{ ...DIAGNOSTICS.failures[0], operation: 'finalize',
-      stage: 'agent_ready', agent_detail }], omitted_failures: 0 };
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.status, 'incomplete');
-    assert.equal(result.code, 'retained_operation_incomplete');
-    assert.deepEqual(result.storage.deposit_diagnostics, diagnostics);
-    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
-    if (agent_detail) assert.ok(Object.isFrozen(result.storage.deposit_diagnostics.failures[0].agent_detail));
-    assert.equal(result.storage.uncertain_payload_bytes, 192);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud v3 rejects false TLS scope, raw details, duplicate copies and v2 field injection', async t => {
-  const detail = { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'io' };
-  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready', agent_detail: detail };
-  const failures = [{ ...good, stage: 'agent_terminal' },
-    ...['CONTENT_INVALID', 'CONTENT_BUSY', 'CONTENT_POLICY', 'unknown']
-      .map(agent_code => ({ ...good, agent_code })),
-    ...['operation', 'exchange'].map(deadline_scope => ({ ...good, agent_detail: { ...detail, deadline_scope } })),
-    ...['provider_lookup', 'stream_open', 'challenge']
-      .map(stage => ({ ...good, agent_detail: { ...detail, stage } })),
-    ...['unobserved', 'PRIVATE-PEER-ERROR', 0, false, {}, []]
-      .map(tls_failure => ({ ...good, agent_detail: { ...detail, tls_failure } })),
-    { ...good, agent_detail: { stage: 'tls_handshake', deadline_scope: 'none' } },
-    { ...good, agent_detail: { ...detail, raw: 'PRIVATE-PEER-ERROR' } }];
-  const invalid = failures.map(failure => ({ version: 3, failures: [failure], omitted_failures: 0 }));
-  invalid.push({ version: 2, failures: [{ ...good, agent_detail: { ...detail, tls_failure: null } }], omitted_failures: 0 },
-    { version: 3, failures: [good, good], omitted_failures: 0 },
-    { version: 3, failures: Array(9).fill(good), omitted_failures: 0 },
-    { version: 3, failures: [good], omitted_failures: 1 },
-    { version: 4, failures: [good], omitted_failures: 0 });
-  for (const diagnostics of invalid) {
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.status, 'failed');
-    assert.equal(result.code, 'invalid_core_report');
-    assert.equal(result.storage, null);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-function diagnosticV4(agent_outcome = null, changes = {}) {
-  return { version: 4, failures: [{ ...DIAGNOSTICS.failures[0], category: 'io', agent_code: null,
-    agent_detail: null, agent_outcome, ...changes }], omitted_failures: 0 };
-}
-
-test('Cloud v4 preserves original failure and custody across nullable and observed local outcomes', async t => {
-  const cases = [diagnosticV4(),
-    ...['missing', 'pending', 'expired', 'query_failed', 'query_timeout']
-      .map(status => diagnosticV4({ status, detail: null })),
-    ...[{ phase: 'remote_receipt_read', category: 'io', deadline_scope: 'none' },
-      { phase: 'admission', category: 'timeout', deadline_scope: 'bridge' },
-      { phase: 'remote_payload_verify', category: 'timeout', deadline_scope: 'remote_wire' },
-      { phase: 'terminal_write', category: 'timeout', deadline_scope: 'operation' },
-      { phase: 'provider_tls_close', category: 'timeout', deadline_scope: 'exchange' },
-      { phase: 'ready_write', category: 'cancelled', deadline_scope: 'none' }]
-      .map(detail => diagnosticV4({ status: 'observed', detail })),
-    diagnosticV4(null, { stage: 'agent_ready', category: 'agent_rejected', agent_code: 'CONTENT_UNAVAILABLE',
-      agent_detail: { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'authentication' } })];
-  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
-  for (const diagnostics of cases) {
-    const value = await fixture(t, diagnostics);
-    const journal = join(value.state, 'owner-state');
-    await writeFile(journal, 'PRIVATE-JOURNAL-CANARY', { mode: 0o600 });
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
-    const { deposit_diagnostics, ...accounting } = result.storage;
-    assert.deepEqual(accounting, baseline.storage);
-    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
-    const outcome = deposit_diagnostics.failures[0].agent_outcome;
-    assert.ok(Object.isFrozen(deposit_diagnostics) && Object.isFrozen(deposit_diagnostics.failures[0]));
-    if (outcome) {
-      assert.ok(Object.isFrozen(outcome));
-      if (outcome.detail) assert.ok(Object.isFrozen(outcome.detail));
-      assert.equal(deposit_diagnostics.failures[0].category, 'io');
-    }
-    for (const canary of [value.root, ...KEYS, 'PRIVATE-JOURNAL-CANARY', 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) {
-      assert.ok(!JSON.stringify(result).includes(canary));
-    }
-    assert.equal(await readFile(journal, 'utf8'), 'PRIVATE-JOURNAL-CANARY');
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud v4 rejects leaking or contradictory observations and old-version field injection', async t => {
-  const detail = { phase: 'remote_receipt_read', category: 'io', deadline_scope: 'none' };
-  const good = { status: 'observed', detail };
-  const invalid = ['PRIVATE-PEER-ERROR', {}, [], { ...good, original_request_id: 'PRIVATE-PEER-ERROR' },
-    { status: 'observed' }, { status: 'observed', detail: null }, { ...good, status: 'missing' },
-    { ...good, status: 'PRIVATE-PEER-ERROR' }, { ...good, detail: { ...detail, raw: 'PRIVATE-PEER-ERROR' } },
-    { ...good, detail: { ...detail, phase: 'unobserved' } },
-    { ...good, detail: { ...detail, category: 'unobserved' } },
-    { ...good, detail: { ...detail, category: 'timeout' } },
-    { ...good, detail: { ...detail, deadline_scope: 'operation' } },
-    { ...good, detail: { phase: 'ready_write', category: 'timeout', deadline_scope: 'bridge' } },
-    { ...good, detail: { phase: 'local_receipt_write', category: 'timeout', deadline_scope: 'remote_wire' } }]
-    .map(outcome => diagnosticV4(outcome));
-  for (const version of [1, 2, 3, 6]) invalid.push({ ...diagnosticV4(good), version });
-  for (const key of ['agent_outcome', 'agent_detail']) {
-    const missing = diagnosticV4(good); delete missing.failures[0][key]; invalid.push(missing);
-  }
-  for (const stage of ['agent_ready', 'signed_request', 'accounting']) invalid.push(diagnosticV4(good, { stage }));
-  invalid.push(diagnosticV4(good, { agent_detail: { stage: 'tls_handshake', deadline_scope: 'none', tls_failure: 'io' } }));
-  for (const diagnostics of invalid) {
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.status, 'failed');
-    assert.equal(result.code, 'invalid_core_report');
-    assert.equal(result.storage, null);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    assert.ok(!JSON.stringify(result).includes('PRIVATE-PEER-ERROR'));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud v5 stream diagnostics cross the child boundary without changing custody or charges', async t => {
-  const baseline = await storePrivateFile('deposit', await fixture(t, undefined));
-  for (const stream_failure of [null, 'policy', 'route_state', 'route_material', 'flow_acquire',
-    'transport_certificate', 'transport_tls', 'initial_paths', 'open_tcp_write', 'subflow_readiness', 'stream_attachment']) {
-    const diagnostics = { version: 5, failures: [{ ...DIAGNOSTICS.failures[0], stage: 'agent_ready',
-      agent_detail: { stage: 'stream_open', deadline_scope: 'none', tls_failure: null, stream_failure },
-      agent_outcome: null }], omitted_failures: 0 };
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(JSON.stringify(result.storage.deposit_diagnostics), JSON.stringify(diagnostics));
-    const { deposit_diagnostics, ...accounting } = result.storage;
-    assert.deepEqual(accounting, baseline.storage);
-    assert.deepEqual({ ...result, storage: baseline.storage }, baseline);
-    assert.ok(Object.isFrozen(deposit_diagnostics.failures[0].agent_detail));
-    for (const canary of [value.root, ...KEYS, 'PRIVATE RAW REPORT MUST NEVER ESCAPE']) assert.ok(!JSON.stringify(result).includes(canary));
-    assert.equal((await lstat(value.state)).isDirectory(), true);
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud v5 rejects counterfeit stream scope and historical field injection', async t => {
-  const detail = { stage: 'stream_open', deadline_scope: 'none', tls_failure: null, stream_failure: 'open_tcp_write' };
-  const good = { ...DIAGNOSTICS.failures[0], stage: 'agent_ready', agent_detail: detail, agent_outcome: null };
-  const failures = [{ ...good, stage: 'agent_terminal' }, { ...good, category: 'io', agent_code: null },
-    ...['CONTENT_POLICY', 'CONTENT_BUSY', 'CONTENT_INVALID', 'unknown'].map(agent_code => ({ ...good, agent_code })),
-    ...['operation', 'exchange'].map(deadline_scope => ({ ...good, agent_detail: { ...detail, deadline_scope } })),
-    ...['route_connect', 'provider_lookup', 'tls_handshake', 'challenge'].map(stage => ({ ...good, agent_detail: { ...detail, stage } })),
-    ...['PRIVATE-STREAM-CANARY', 'unknown', 0, false, [], {}].map(stream_failure => ({ ...good, agent_detail: { ...detail, stream_failure } })),
-    { ...good, agent_detail: { ...detail, tls_failure: 'io' } },
-    { ...good, agent_detail: { ...detail, raw: 'PRIVATE-STREAM-CANARY' } }];
-  for (const key of Object.keys(detail)) {
-    const missing = { ...detail }; delete missing[key]; failures.push({ ...good, agent_detail: missing });
-  }
-  const invalid = failures.map(failure => ({ version: 5, failures: [failure], omitted_failures: 0 }));
-  for (const version of [2, 3, 4]) {
-    const failure = { ...good }; if (version < 4) delete failure.agent_outcome;
-    invalid.push({ version, failures: [failure], omitted_failures: 0 });
-    invalid.push({ version, failures: [{ ...failure, agent_detail: { ...detail, stream_failure: null } }], omitted_failures: 0 });
-  }
-  for (const diagnostics of invalid) {
-    const value = await fixture(t, diagnostics);
-    const result = await storePrivateFile('deposit', value);
-    assert.equal(result.code, 'invalid_core_report');
-    assert.equal(result.storage, null);
-    assert.equal(result.local_process_joined, true);
-    assert.equal(result.remote_cleanup_confirmed, false);
-    assert.ok(!JSON.stringify(result).includes('PRIVATE-STREAM-CANARY'));
-    assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
-  }
-});
-
-test('Cloud vendored helpers retain exact local provenance sizes and digests', async () => {
-  const provenance = JSON.parse(await readFile(new URL('../third_party/volparossa-image-source.json', import.meta.url), 'utf8'));
-  assert.equal(provenance.repository, 'https://github.com/VOLPAROSSA/volparossa-image');
-  assert.match(provenance.revision, /^[0-9a-f]{40}$/);
-  assert.equal(provenance.local_modifications, false);
-  assert.deepEqual(Object.keys(provenance.files).sort(), ['LICENSE', 'scripts/immich_snapshot.py', 'src/core-storage.mjs']);
-  for (const [source, entry] of Object.entries(provenance.files)) {
-    const name = source.split('/').at(-1);
-    assert.equal(entry.local, `vendor/volparossa-image/${name}`);
-    const bytes = await readFile(new URL(`../${entry.local}`, import.meta.url));
-    assert.equal(bytes.length, entry.bytes);
-    assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
-  }
+test('Cloud ciphertext verification and cancellation stay ahead of selected diagnostic process authority', async t => {
+  const value = await fixture(t, { challengeReadDiagnosticsV10: true });
+  await writeFile(join(value.bundle, 'file.pgp'), Buffer.alloc(CIPHER.length, 0x55));
+  await assert.rejects(storePrivateFile('deposit', value), { code: 'CIPHER_IDENTITY_MISMATCH' });
+  await assert.rejects(originalMainStore('deposit', value), { code: 'CIPHER_IDENTITY_MISMATCH' });
+  await writeFile(join(value.bundle, 'file.pgp'), CIPHER);
+  const cancel = new AbortController(); cancel.abort();
+  await assert.rejects(storePrivateFile('deposit', value, { signal: cancel.signal }), { code: 'cancelled' });
+  await assert.rejects(lstat(value.argv), { code: 'ENOENT' });
+  assert.equal((await lstat(value.state)).isDirectory(), true);
+  assert.deepEqual(await readFile(join(value.bundle, 'file.pgp')), CIPHER);
 });

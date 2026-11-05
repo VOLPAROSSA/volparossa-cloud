@@ -1,7 +1,7 @@
 {
   "version": 1,
   "repository": "https://github.com/VOLPAROSSA/volparossa-image",
-  "revision": "949f208dbb48fcb734d4dfd33eb1933b69830a01",
+  "revision": "770a23fef01cb4cc69303a433b31b9df0d26b44e",
   "license": "GPL-3.0-only",
   "local_modifications": false,
   "files": {
@@ -12,8 +12,8 @@
     },
     "src/core-storage.mjs": {
       "local": "vendor/volparossa-image/core-storage.mjs",
-      "bytes": 46596,
-      "sha256": "b7c86b85ab0b9ca21c9059296c434895bcfd1e21dbf46cf23eed3d42697e1edf"
+      "bytes": 53669,
+      "sha256": "64d5eca0f4bd3de3b0898cbf60c905abc40d917a173c0ef897570c7cb43dcc4f"
     },
     "LICENSE": {
       "local": "vendor/volparossa-image/LICENSE",
@@ -25,7 +25,11 @@
     "Owner-private GnuPG supervised agent and standard OpenPGP AES256/MDC process",
     "Core-owned fragment placement and uniform redundancy; additive v2 repair accounting",
     "Finite owner maintenance supervision and same-adapter foreground stop/join/resume",
-    "Optional closed deposit diagnostics bounded by validated retained fragment and copy counts"
+    "Explicit mutually exclusive v7-v10 deposit diagnostics; absent/false selectors preserve default results"
   ],
-  "not_claimed": ["Immich snapshot compatibility", "automatic dependency installation", "actual peer storage proof"]
+  "not_claimed": [
+    "Immich snapshot compatibility",
+    "automatic dependency installation",
+    "actual peer storage proof"
+  ]
 }

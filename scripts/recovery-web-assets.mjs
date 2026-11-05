@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Public, immutable UI assets only. Owner/catalog metadata stays behind bearer auth.
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, readFile, realpath } from 'node:fs/promises';
 import { extname, isAbsolute, join } from 'node:path';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -11,6 +12,24 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.ico': 'image/x-icon',
   '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8' };
+
+async function readAsset(path, expected) {
+  require(await realpath(path) === path);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const info = await handle.stat();
+    require(info.isFile() && info.size === expected.bytes);
+    const bytes = Buffer.alloc(info.size + 1); let size = 0;
+    while (size < bytes.length) {
+      const { bytesRead } = await handle.read(bytes, size, bytes.length - size, size);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    const after = await handle.stat();
+    require(size === info.size && ['size', 'mtimeMs', 'mode', 'uid', 'gid'].every(key => info[key] === after[key]));
+    return bytes.subarray(0, size);
+  } finally { await handle.close(); }
+}
 
 export async function loadRecoveryWebAssets({ distDirectory, origin, ownerUploads = false }) {
   const url = new URL(origin);
@@ -33,10 +52,7 @@ export async function loadRecoveryWebAssets({ distDirectory, origin, ownerUpload
       && name.split('/').every(part => part && part !== '.' && part !== '..')
       && Number.isSafeInteger(expected.bytes) && expected.bytes >= 0 && expected.bytes <= 32 * 1024 ** 2);
     const path = join(distDirectory, name);
-    const info = await lstat(path);
-    require(info.isFile() && !info.isSymbolicLink() && info.size === expected.bytes
-      && await realpath(path) === path);
-    const data = await readFile(path);
+    const data = await readAsset(path, expected);
     require(sha(data) === expected.sha256);
     total += data.length;
     require(total <= 120 * 1024 ** 2);

@@ -1,0 +1,36 @@
+{
+  "source_repository": "https://github.com/lucide-icons/lucide",
+  "source_commit": "a630cec77eac6568b989e87e4947a8bfe45caacd",
+  "files": [
+    {
+      "file": "lock-keyhole.svg",
+      "git_blob": "97fcbd189d5f5d855d26bb1698680367cf3d9391",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/lock-keyhole.svg"
+    },
+    {
+      "file": "key-round.svg",
+      "git_blob": "c8f0e66556d9f12c4f22ef571902e4272bcbe0d4",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/key-round.svg"
+    },
+    {
+      "file": "box.svg",
+      "git_blob": "114e73759ecb7d3480409ab876b600803fc4bdd7",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/box.svg"
+    },
+    {
+      "file": "laptop.svg",
+      "git_blob": "613afff3caa54ee0be639577fa09add361c777a7",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/laptop.svg"
+    },
+    {
+      "file": "circle-check.svg",
+      "git_blob": "14e45c58c9ece47f2204e89d19d8463f485325a0",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/circle-check.svg"
+    },
+    {
+      "file": "play.svg",
+      "git_blob": "199743ed2e546fdcef48f9ebbe4030e8f75c59c1",
+      "source": "https://github.com/lucide-icons/lucide/blob/a630cec77eac6568b989e87e4947a8bfe45caacd/icons/play.svg"
+    }
+  ]
+}

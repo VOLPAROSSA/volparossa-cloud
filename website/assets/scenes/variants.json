@@ -1,0 +1,80 @@
+{
+  "hero": {
+    "desktop": [
+      {
+        "stem": "hero-desktop-960",
+        "width": 960,
+        "height": 575
+      },
+      {
+        "stem": "hero-desktop-1536",
+        "width": 1536,
+        "height": 920
+      }
+    ],
+    "mobile": [
+      {
+        "stem": "hero-mobile-480",
+        "width": 480,
+        "height": 389
+      },
+      {
+        "stem": "hero-mobile-800",
+        "width": 800,
+        "height": 648
+      }
+    ]
+  },
+  "courtyards": {
+    "desktop": [
+      {
+        "stem": "courtyards-desktop-960",
+        "width": 960,
+        "height": 438
+      },
+      {
+        "stem": "courtyards-desktop-1536",
+        "width": 1536,
+        "height": 700
+      }
+    ],
+    "mobile": [
+      {
+        "stem": "courtyards-mobile-480",
+        "width": 480,
+        "height": 320
+      },
+      {
+        "stem": "courtyards-mobile-800",
+        "width": 800,
+        "height": 533
+      }
+    ]
+  },
+  "valley": {
+    "desktop": [
+      {
+        "stem": "valley-desktop-960",
+        "width": 960,
+        "height": 400
+      },
+      {
+        "stem": "valley-desktop-1536",
+        "width": 1536,
+        "height": 640
+      }
+    ],
+    "mobile": [
+      {
+        "stem": "valley-mobile-480",
+        "width": 480,
+        "height": 265
+      },
+      {
+        "stem": "valley-mobile-800",
+        "width": 800,
+        "height": 442
+      }
+    ]
+  }
+}

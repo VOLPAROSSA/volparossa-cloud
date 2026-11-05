@@ -1,0 +1,5 @@
+dist/
+preview/
+qa/
+__pycache__/
+node_modules/

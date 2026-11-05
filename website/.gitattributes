@@ -1,0 +1,4 @@
+# Keep the reviewed theme's upstream bytes and hashes, including original CRLF
+# and license trailing newline. Authored files retain normal whitespace checks.
+vendor/theme/assets/upstream/immich.svg -text -whitespace
+vendor/theme/assets/upstream/IMMICH-LICENSE.txt -text -whitespace
