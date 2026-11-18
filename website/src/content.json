@@ -8,7 +8,7 @@
   "core": "https://volparossa.org/volparossa/",
   "reviewed_on": "2026-10-30",
   "source_commit": "468e29f3ff1e183bfb67830e9fdfb893807e8f9b",
-  "theme_commit": "251b8f385091d5f490d509fcadb94ca060ac94b6",
+  "theme_commit": "991cf1638c906226574b9c21bb32c6618fc07fb7",
   "evidence": "https://github.com/VOLPAROSSA/volparossa-cloud/blob/main/docs/OWNER_UPLOADS.md#evidence-and-remaining-scope",
   "trial": {
     "url": "https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756",
