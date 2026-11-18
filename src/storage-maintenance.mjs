@@ -30,9 +30,9 @@ export function validateStorageMaintenance(value) {
 
 /** Start only the explicit, previously signed enrollments, with no grant creation or retries. */
 export async function openStorageMaintenance(value, {
-  signal, storageFactory = path => CoreStorage.open(path),
+  signal, storageFactory = path => CoreStorage.open(path), foregroundOnly = false,
 } = {}) {
-  if (value?.version === 2) return openUploadMaintenance(value, { signal, storageFactory });
+  if (value?.version === 2) return openUploadMaintenance(value, { signal, storageFactory, foregroundOnly });
   const entries = validateStorageMaintenance(value);
   const owned = new Map();
   let closed = false, closing;
@@ -57,7 +57,7 @@ export async function openStorageMaintenance(value, {
       owned.set(entry.config, { core, enrollment: entry.enrollment });
       active();
       // CoreStorage owns pause/join/resume around foreground operations on this same object.
-      await core.startMaintenance({ enrollment: entry.enrollment }, { signal });
+      if (!foregroundOnly) await core.startMaintenance({ enrollment: entry.enrollment }, { signal });
       active();
     }
     signal?.addEventListener('abort', abort, { once: true });

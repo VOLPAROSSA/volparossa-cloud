@@ -328,6 +328,12 @@ export async function openPrivateCatalog({ catalog, workDirectory, maxOpenBytes 
       return key === undefined ? null : Object.freeze(JSON.parse(key));
     },
     async stat(parts, { signal } = {}) { return lookup(parts, signal)?.stat ?? null; },
+    verifyStorageBinding(parts, bundle, config, receipt, signal) {
+      const entry = lookup(parts, signal)?.entry;
+      check(entry && entry.bundle === bundle && entry.config === config
+        && entry.cipherSha256 === receipt.cipher_sha256 && entry.cipherBytes === receipt.cipher_bytes,
+      'FILE_VERSION_CHANGED');
+    },
     async materializationBytes(parts, { signal } = {}) {
       const node = lookup(parts, signal);
       check(node?.kind === 'file', 'NOT_A_FILE');

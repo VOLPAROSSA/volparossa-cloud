@@ -98,6 +98,55 @@ A committed name cannot be overwritten, even
 when a client requests overwrite. If a response is lost after commit, re-list the
 space: a repeated `PUT` gets 412 rather than creating another stored copy.
 
+### Finish a pending upload after losing the browser's source file
+
+The owner can finish a previously started deposit from the retained encrypted
+file and Core journal. Stop the foreground recovery service first so its workspace
+lock is available. Use the same service configuration and the upload's original
+space and filename. Place this request in a private owner directory (0700) in a
+file readable only by its owner (0600).
+
+```json
+{
+  "version": 1,
+  "space": "My uploads",
+  "name": "report.pdf",
+  "bearerToken": "<configured owner bearer>"
+}
+```
+
+```sh
+node scripts/cloud-serve.mjs resume-upload \
+  --config /absolute/private/service.json \
+  --request /absolute/private/resume.json
+```
+
+The command authenticates the request, opens the encrypted catalog, checks its
+ciphertext hash, byte length and paths, and verifies the original journal and
+current storage template. An existing maintenance intent must match the owner's
+policy, remaining limits and grants. Core continues its signed per-provider
+journals with the retained ciphertext. The command publishes READY after
+confirmed redundant storage and any required enrollment. It then closes the
+workspace. Restart the recovery service to list and download the file in Files.
+Repeating the command for an already published name reports `ready` and makes
+no further deposit. The command's output contains only a bounded status or
+error code. The private request contains an owner credential.
+
+Previously created pending owner uploads use the same on-disk format. A busy
+workspace, changed authority, missing journal, altered ciphertext, expired
+policy or incomplete storage leaves the operation unconfirmed. Existing
+reservations and charges stay recorded. Restore the original configuration
+and required access before trying the same operation again.
+
+If the upload was interrupted before the encrypted catalog was published, its
+opaque local staging directory can remain on disk. At that point this Cloud
+upload flow has not created a Core journal or submitted bytes to a provider.
+A catalog without a journal is likewise ineligible for this command. Selecting
+the original file in Files can start or continue those earlier stages. An
+abrupt process kill can also leave a private temporary upload body in the work
+directory. The one-shot command operates on the encrypted catalog and journal
+and does not sweep these interrupted stages.
+
 After service restart, committed catalogs become visible again. Every download
 still restores through the core, verifies the encrypted object and authenticated
 content, then removes temporary plaintext. Reads neither consume a backup nor

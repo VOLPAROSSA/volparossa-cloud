@@ -93,7 +93,7 @@ export function validateUploadMaintenance(value) {
 }
 
 export async function openUploadMaintenance(value, { signal,
-  storageFactory = path => CoreStorage.open(path), now = () => Math.floor(Date.now() / 1000),
+  storageFactory = path => CoreStorage.open(path), now = () => Math.floor(Date.now() / 1000), foregroundOnly = false,
 } = {}) {
   const policy = validateUploadMaintenance(value);
   const records = new Map(), byConfig = new Map(), cores = new Set(), opening = new Set();
@@ -223,8 +223,15 @@ export async function openUploadMaintenance(value, { signal,
       records.set(state, entry);
     }
     Object.assign(entry, { root, intent, intentHash: original.sha256, expiresAt: intent.expiresAt });
-    try { await unchanged(entry); }
-    catch { entry.unknown = true; entry.stateName = 'degraded'; }
+    try {
+      await unchanged(entry);
+      // A one-shot owner command must account for every retained obligation
+      // without activating other archives' maintenance sessions.
+      if (foregroundOnly && !await absent(entry.enrollment)) {
+        const bound = await enrollment(entry);
+        check(bound.authority.maximum_charged === entry.ceiling, 'MAINTENANCE_AUTHORITY_MISMATCH');
+      }
+    } catch { entry.unknown = true; entry.stateName = 'degraded'; }
     if (activated && bounded()) await start(entry);
   }
   async function reserve(input) {
