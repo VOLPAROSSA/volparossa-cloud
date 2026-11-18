@@ -34,7 +34,8 @@ function base() {
 }
 async function fixture(t, { withMaintenance = false } = {}) {
   await mkdir(join(ROOT, 'build'), { recursive: true, mode: 0o700 });
-  const root = await mkdtemp(join(ROOT, 'build', 'upload-test-'));
+  // The file and catalog helpers must also work when the real path exceeds sun_path.
+  const root = await mkdtemp(join(ROOT, 'build', 'owner-workspace-'.repeat(7)));
   await chmod(root, 0o700);
   const workDirectory = join(root, 'work'), directory = join(root, 'uploads');
   for (const path of [workDirectory, directory]) await mkdir(path, { mode: 0o700 });

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """One private DAV file in standard OpenPGP; no networking or peer operations."""
 import argparse
-from contextlib import contextmanager
+from contextlib import chdir, contextmanager
 import hashlib
 import importlib.util
 import io
@@ -36,6 +36,17 @@ def directory(value):
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
             and stat.S_IMODE(info.st_mode) == 0o700, 'PRIVATE_DIRECTORY_REQUIRED')
     return path
+
+
+@contextmanager
+def private_agent(parent):
+    # This single-operation Linux helper and its GnuPG children share a cwd.
+    # Keep the socket address short while keeping the home inside the owner directory.
+    with chdir(parent):
+        anchor = Path('/proc/self/cwd')
+        require(anchor.samefile(parent), 'PRIVATE_AGENT_DIRECTORY_REQUIRED')
+        with CRYPTO.private_agent(anchor) as home:
+            yield home
 
 
 @contextmanager
@@ -121,7 +132,7 @@ def create(source, metadata, output):
         with private_file(source, MAX_BYTES) as (input_file, info):
             require(info.st_size == selected['size'], 'SOURCE_SIZE_CHANGED')
             with open(os.open(cipher, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as encrypted:
-                with CRYPTO.private_agent(parent) as home:
+                with private_agent(parent) as home:
                     with CRYPTO.crypt_process(home, key, encrypt=True, output=encrypted, timeout_seconds=3600) as process:
                         with tarfile.open(fileobj=process.stdin, mode='w|', format=tarfile.USTAR_FORMAT) as archive:
                             member = tarfile.TarInfo('content.bin')
@@ -213,7 +224,7 @@ def restore(bundle, cipher_path, output):
             require(info.st_size == expected['cipher_bytes']
                     and hashlib.file_digest(cipher, 'sha256').hexdigest() == expected['cipher_sha256'], 'CIPHER_IDENTITY_MISMATCH')
             cipher.seek(0)
-            with CRYPTO.private_agent(parent) as home:
+            with private_agent(parent) as home:
                 with CRYPTO.crypt_process(home, key, encrypt=False, output=subprocess.PIPE,
                         timeout_seconds=3600, input_stream=cipher) as process:
                     length = unpack(process.stdout, staging, expected['version'] == 2)
