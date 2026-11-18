@@ -7,8 +7,8 @@ screens were used. Artwork and implementation are materially AI-assisted.
 
 ## Shared design
 
-`vendor/theme/theme-version.json` records design 1.0.3 from
-`VOLPAROSSA/volparossa.github.io@251b8f385091d5f490d509fcadb94ca060ac94b6`.
+`vendor/theme/theme-version.json` records design 1.1.0 from
+`VOLPAROSSA/volparossa.github.io@991cf1638c906226574b9c21bb32c6618fc07fb7`.
 The exporter ran from a clean detached checkout at that exact commit. Original
 font WOFF2 files and SIL notices, project logo/alpha and technical derivatives,
 GitHub Octicon/MIT notice, OpenCloud SVG and upstream notices travel unchanged.

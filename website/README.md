@@ -39,8 +39,8 @@ selected; publication is controlled by the separate manual workflow below.
 
 ## Shared theme and content maintenance
 
-`vendor/theme/` is the unmodified source-only export of shared design **1.0.3**
-from homepage commit `251b8f385091d5f490d509fcadb94ca060ac94b6`. Its manifest
+`vendor/theme/` is the unmodified source-only export of shared design **1.1.0**
+from homepage commit `991cf1638c906226574b9c21bb32c6618fc07fb7`. Its manifest
 pins every exported file. The build verifies that manifest and uses the original
 navigation renderer, header, footer, fonts, logo, GitHub icon and base CSS/JS.
 Only the footer status sentence is specialized at render time. The Cloud
