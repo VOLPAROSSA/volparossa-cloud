@@ -251,6 +251,8 @@ def main():
     decrypt.add_argument('--cipher', required=True)
     decrypt.add_argument('--output', required=True)
     args = parser.parse_args()
+    # The worker may inherit a directory it cannot traverse after dropping privileges.
+    os.chdir(directory(Path(args.output).parent))
     result = create(args.source, args.metadata, args.output) if args.operation == 'encrypt' else restore(args.bundle, args.cipher, args.output)
     print(json.dumps(result, sort_keys=True))
 

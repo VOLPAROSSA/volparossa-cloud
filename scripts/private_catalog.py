@@ -98,6 +98,8 @@ def main():
     commands.add_parser('seal').add_argument('--output', required=True)
     commands.add_parser('decrypt').add_argument('--catalog', required=True)
     args = parser.parse_args()
+    target = args.output if args.operation == 'seal' else args.catalog
+    os.chdir(FILE['directory'](Path(target).parent))
     value = seal(args.output) if args.operation == 'seal' else decrypt(args.catalog)
     print(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False))
 
