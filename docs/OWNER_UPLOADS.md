@@ -169,6 +169,34 @@ The service supervises maintenance while running, not after it has been stopped.
 
 ## Evidence and remaining scope
 
+### Owner upload and recovery on 18 November 2026
+
+The original OpenCloud Files/Uppy interface uploaded a 262,145-byte synthetic file
+and received HTTP 201. The trial stopped the source DAV server, removed both local
+ciphertexts and stopped one of three storage providers. A fresh service and browser
+then downloaded the uploaded file twice and verified its contents. Two restores
+of the baseline file also succeeded. The Core retired all 16 fragment copies with
+zero final payload charge. Cleanup left zero owned topology objects, and the
+disposable guest's root network-state snapshots matched. The result reached
+`cloud-private-upload-complete` on Core `94ba2fb8b3e55d4aa0ab8260333c8b080e6fa58c`
+and Cloud `178592a3881d49f839f7716a154f7ef446ecbda5`. [Passed run 44374814775](https://github.com/VOLPAROSSA/volparossa/actions/runs/44374814775)
+
+The preceding run stopped during `baseline_import`, before the browser upload, on
+Core `0b4d2481f2ffbd3c293c068069bb3ddfc3b7ff8d` and Cloud
+`998bf2d46ba51ba904500e4f223d5f7d200092dc`. Its receipt records the failure kind
+as `unclassified`. A separate process test reproduced a permissions error when
+the crypto helper tried to return to an inherited working directory. Both corrected
+helper entrypoints start in an owner-private directory. [Failed run 44368961729](https://github.com/VOLPAROSSA/volparossa/actions/runs/44368961729)
+
+Independent replay of the passing report and evidence validators succeeded.
+The artifact ZIP SHA-256 is `32e6c9459f2e609bca870e29f215d954ece624e0b06966878c59dcdf524adb8b`.
+The SHA-256 of `cloud-private-upload-smoke.json` is
+`e1b2faee4cda1ede8a7b22ae5cddd5fa6c4456dba99fe4405813ea9977729eba`.
+Cross-device recovery, automatic repair and shared-account synchronization still
+require separate trials. [Acceptance artifact 14461289951](https://github.com/VOLPAROSSA/volparossa/actions/runs/44374814775/artifacts/14461289951)
+
+### Earlier owner upload and recovery trial
+
 The joined [original Files upload and peer-recovery trial 37218270756](https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756)
 **passes**, attempt 1, for Cloud
 `ffdcfaa15cdd2a029dae545904b0a58603da4e17` and core
