@@ -79,18 +79,25 @@ async function loadReceipt(bundle) {
   await directory(bundle);
   return receipt(await readPrivateJSON(join(bundle, 'receipt.json'), 4096));
 }
-async function verifiedCipher(value, expected) {
+async function verifiedCipher(value, expected, signal) {
   const handle = await privateFile(value, MAX_BYTES + 1024 ** 2);
   try {
     const before = await handle.stat({ bigint: true });
     check(before.size === BigInt(expected.cipher_bytes), 'CIPHER_IDENTITY_MISMATCH');
     const hash = createHash('sha256');
-    for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
+    for await (const chunk of handle.createReadStream({ autoClose: false, signal })) hash.update(chunk);
     const after = await handle.stat({ bigint: true });
     check(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => before[key] === after[key])
       && hash.digest('hex') === expected.cipher_sha256, 'CIPHER_IDENTITY_MISMATCH');
   } finally { await handle.close(); }
 }
+export async function verifyOwnerUploadBundle(bundle, signal) {
+  const expected = await loadReceipt(bundle);
+  check(expected.version === 2, 'INVALID_UPLOAD_RECEIPT');
+  await verifiedCipher(join(bundle, 'file.pgp'), expected, signal);
+  return expected;
+}
+
 function helper(args, signal) {
   check(!signal?.aborted, 'CANCELLED');
   return new Promise((resolve, reject) => {

@@ -17,9 +17,10 @@ All supplied paths are absolute and canonical. Owner work directories must be
 mode `0700`; configuration, identity, passphrase, grants, receipts, keys and
 encrypted files must be owner-owned regular files at mode `0600`. Symlinks and
 hard-linked private files are rejected. Each import/output path must be new.
-The isolated GnuPG helper requires an existing owner-private GnuPG runtime
-directory if `/run/user/<uid>` exists; otherwise its work path must fit the
-Unix socket length limit. It does not modify a global keyring or agent.
+The isolated GnuPG helper creates its temporary home inside the owner directory.
+It addresses that directory through Linux `/proc/self/cwd`, so deeply nested owner
+paths work within the Unix socket length limit. If `/run/user/<uid>` exists,
+GnuPG also requires its existing owner-private runtime directory.
 
 Keep the source configuration in a private file, for example
 `/absolute/private/source.private.json` (placeholder credentials only below):

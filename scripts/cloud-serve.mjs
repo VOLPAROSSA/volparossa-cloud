@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Explicit owner-only foreground DAV service. Importing this file starts nothing.
 import { parseArgs } from 'node:util';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { readPrivateJSON } from '../src/private-file.mjs';
 import { openPrivateCatalog } from '../src/private-catalog.mjs';
@@ -71,11 +72,21 @@ export function parseArguments(args) {
   return values.config;
 }
 
-export async function startCloudService(value, {
+export function startCloudService(value, options) { return openCloud(value, null, options); }
+
+async function openCloud(value, resume, {
   signal, openCatalog = openPrivateCatalog, startServer = startPrivateDavServer, openUploads = openOwnerUploads,
 } = {}) {
   // The optional factories are module test seams, never executable configuration.
   const config = validateConfiguration(value);
+  if (resume !== null) {
+    if (!config.ownerUploads || !resume || typeof resume !== 'object' || Array.isArray(resume)
+      || Object.keys(resume).sort().join(',') !== 'bearerToken,name,space,version' || resume.version !== 1
+      || resume.space !== config.ownerUploads.space || typeof resume.name !== 'string'
+      || typeof resume.bearerToken !== 'string') fail();
+    const digest = token => createHash('sha256').update(token).digest();
+    if (!timingSafeEqual(digest(resume.bearerToken), digest(config.bearerToken))) throw new CloudServeError('UNAUTHORIZED');
+  }
   const cancel = new AbortController();
   const abort = () => cancel.abort();
   signal?.addEventListener('abort', abort, { once: true });
@@ -98,6 +109,12 @@ export async function startCloudService(value, {
       maxOpenBytes: config.maxOpenBytes, maxOpenFiles: config.maxConcurrent }, { signal: cancel.signal });
     if (config.ownerUploads) backend = await openUploads({ ...config.ownerUploads, workDirectory: config.workDirectory,
       maxFileBytes: config.maxOpenBytes }, { base: backend, signal: cancel.signal });
+    if (resume !== null) {
+      const deadline = AbortSignal.timeout(config.requestTimeoutMs);
+      await backend.resume([resume.space, resume.name], { signal: AbortSignal.any([cancel.signal, deadline]) });
+      await close();
+      return Object.freeze({ version: 1, kind: 'volparossa-cloud-owner-upload-resume', state: 'ready' });
+    }
     if (cancel.signal.aborted) throw new CloudServeError('CANCELLED');
     server = await startServer({ backend, bearerToken: config.bearerToken, port: config.port,
       allowedOrigins: config.allowedOrigins, maxConcurrent: config.maxConcurrent,
@@ -112,11 +129,23 @@ export async function startCloudService(value, {
   } catch (error) { await close(); throw error; }
 }
 
-export async function run(args, { signal } = {}) {
-  const path = parseArguments(args);
-  const config = await readPrivateJSON(path);
-  return startCloudService(config, { signal });
+export async function run(args, options = {}) {
+  if (args[0] === 'resume-upload') {
+    const { values, tokens } = parseArgs({ args: args.slice(1), strict: true, allowPositionals: false, tokens: true,
+      options: { config: { type: 'string' }, request: { type: 'string' } } });
+    if (!values.config || !values.request || tokens.length !== 2) fail();
+    const config = await readPrivateJSON(values.config);
+    const request = await readPrivateJSON(values.request, 16384);
+    if (!request) fail();
+    return openCloud(config, request, options);
+  }
+  return startCloudService(await readPrivateJSON(parseArguments(args)), options);
 }
+
+const RESUME_CODES = new Set(['UNAUTHORIZED', 'UPLOAD_WORKSPACE_BUSY', 'PENDING_UPLOAD_NOT_FOUND',
+  'PENDING_UPLOAD_JOURNAL_REQUIRED', 'UPLOAD_AUTHORITY_CHANGED', 'UPLOAD_MAINTENANCE_CHANGED',
+  'UPLOAD_PLAN_INCOMPLETE', 'UPLOAD_STORAGE_INCOMPLETE', 'UPLOAD_CLEANUP_FAILED', 'UPLOAD_TOO_LARGE',
+  'CIPHER_IDENTITY_MISMATCH', 'FILE_VERSION_CHANGED', 'PENDING_UPLOAD_DIFFERS']);
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const cancel = new AbortController();
@@ -124,16 +153,23 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   for (const kind of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(kind, onSignal);
   let service;
   try {
-    service = await run(process.argv.slice(2), { signal: cancel.signal });
-    console.log(JSON.stringify({ version: 1, kind: 'volparossa-cloud-private-read',
-      state: 'listening', origin: service.origin, readOnly: service.readOnly, loopbackOnly: true,
-      originalServerFallback: false, openCloudAccountService: false }));
-    await new Promise(resolve => {
-      if (cancel.signal.aborted) resolve();
-      else cancel.signal.addEventListener('abort', resolve, { once: true });
-    });
-  } catch {
-    console.error(JSON.stringify({ success: false, code: 'PRIVATE_READ_SERVICE_FAILED' }));
+    const result = await run(process.argv.slice(2), { signal: cancel.signal });
+    if (result.kind === 'volparossa-cloud-owner-upload-resume') {
+      console.log(JSON.stringify(result));
+    } else {
+      service = result;
+      console.log(JSON.stringify({ version: 1, kind: 'volparossa-cloud-private-read',
+        state: 'listening', origin: service.origin, readOnly: service.readOnly, loopbackOnly: true,
+        originalServerFallback: false, openCloudAccountService: false }));
+      await new Promise(resolve => {
+        if (cancel.signal.aborted) resolve();
+        else cancel.signal.addEventListener('abort', resolve, { once: true });
+      });
+    }
+  } catch (error) {
+    const code = process.argv[2] === 'resume-upload'
+      ? (RESUME_CODES.has(error.code) ? error.code : 'UPLOAD_RESUME_UNCONFIRMED') : 'PRIVATE_READ_SERVICE_FAILED';
+    console.error(JSON.stringify({ success: false, code }));
     process.exitCode = 1;
   } finally {
     try {
