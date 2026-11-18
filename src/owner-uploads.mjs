@@ -5,8 +5,9 @@ import { createHash, randomBytes } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, open, readdir, realpath, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { CoreStorage } from '../vendor/volparossa-image/core-storage.mjs';
-import { readPrivateJSON, sealOwnerUpload } from './private-file.mjs';
+import { readPrivateJSON, sealOwnerUpload, verifyOwnerUploadBundle } from './private-file.mjs';
 import { openPrivateCatalog, sealPrivateCatalogEntries } from './private-catalog.mjs';
 import { recoveryResourceId, recoverySpaceId } from './private-resource-id.mjs';
 
@@ -120,12 +121,68 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
     for (const name of names.filter(name => name !== 'LOCK').sort()) await loadEntry(name);
   } catch (error) { await Promise.allSettled([...entries.values()].map(entry => entry.backend.close())); await lock.close(); throw error; }
 
-  async function upload(parts, body, { signal: requestSignal, length } = {}) {
+  async function retainedReceipt(entry, parts, operationSignal) {
+    const bundle = join(entry.root, 'bundle'), config = join(entry.root, 'core.json'), journal = join(entry.root, 'journal');
+    check(!await absent(journal), 'PENDING_UPLOAD_JOURNAL_REQUIRED');
+    await privateDirectory(journal);
+    const configured = await readPrivateJSON(config);
+    check(isDeepStrictEqual(configured, { ...template, stateDirectory: journal }), 'UPLOAD_AUTHORITY_CHANGED');
+    const receipt = await verifyOwnerUploadBundle(bundle, operationSignal);
+    check(receipt.cipher_bytes <= maxFileBytes, 'UPLOAD_TOO_LARGE');
+    entry.backend.verifyStorageBinding(parts, bundle, config, receipt, operationSignal);
+    return receipt;
+  }
+  async function selectUpload(parts, body, length, stage, requestSignal) {
+    const plain = join(stage, 'body');
+    let size = 0;
+    const digest = createHash('sha256');
+    const plainFile = await open(plain, 'wx', 0o600);
+    try {
+      for await (const data of body) {
+        active(requestSignal); controller.signal.throwIfAborted();
+        size += data.length;
+        check(size <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
+        digest.update(data); await plainFile.writeFile(data);
+      }
+      check(length === undefined || length === size, 'UPLOAD_LENGTH_MISMATCH', 400);
+      await plainFile.sync();
+    } finally { await plainFile.close(); }
+    const sha256 = digest.digest('hex');
+    let entry = entries.get(parts[1]);
+    if (entry) {
+      check(entry.stat.size === size && entry.stat.etag === `"vp-${sha256}"`, 'PENDING_UPLOAD_DIFFERS', 409);
+    } else {
+      check((await readdir(directory)).filter(name => name !== 'LOCK').length < 256, 'UPLOAD_WORKSPACE_BOUND', 507);
+      const id = `object-${randomBytes(16).toString('hex')}`;
+      const root = join(directory, id);
+      await mkdir(root, { mode: 0o700 }); await syncDirectory(directory);
+      const bundle = join(root, 'bundle');
+      const config = join(root, 'core.json');
+      const receipt = await sealOwnerUpload({ source: plain, space, name: parts[1], size, sha256, output: bundle }, { signal: controller.signal });
+      // The read budget covers ciphertext, including its encrypted metadata.
+      check(receipt.cipher_bytes <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
+      await writeNew(config, { ...template, stateDirectory: join(root, 'journal') });
+      await sealPrivateCatalogEntries([{ segments: parts, bundle, config, size, sha256,
+        cipherSha256: receipt.cipher_sha256, cipherBytes: receipt.cipher_bytes, lastModified: null }],
+      join(root, 'catalog'), { signal: controller.signal });
+      await syncDirectory(root);
+      entry = await loadEntry(id);
+    }
+    return entry;
+  }
+
+  async function upload(parts, body, { signal: requestSignal, length } = {}, retainedOnly = false) {
     active(requestSignal);
     check(parts.length === 2 && parts[0] === space && nameValid(parts[1]), 'UPLOAD_TARGET_NOT_AUTHORIZED', 403);
-    check(!entries.get(parts[1])?.ready, 'UPLOAD_ALREADY_EXISTS', 412);
     check(!busy, 'UPLOAD_BUSY', 409);
-    check(length === undefined || Number.isSafeInteger(length) && length >= 0 && length <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
+    let entry = entries.get(parts[1]);
+    if (retainedOnly) {
+      check(entry, 'PENDING_UPLOAD_NOT_FOUND', 404);
+      if (entry.ready) return entry.stat;
+    } else {
+      check(!entry?.ready, 'UPLOAD_ALREADY_EXISTS', 412);
+      check(length === undefined || Number.isSafeInteger(length) && length >= 0 && length <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
+    }
     busy = true;
     controller = new AbortController();
     const cancel = () => controller.abort();
@@ -133,51 +190,24 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
     signal?.addEventListener('abort', cancel, { once: true });
     let stage;
     try {
-      stage = await mkdtemp(join(workDirectory, 'upload-body-'));
-      const plain = join(stage, 'body');
-      let size = 0;
-      const digest = createHash('sha256');
-      const plainFile = await open(plain, 'wx', 0o600);
-      try {
-        for await (const data of body) {
-          active(requestSignal); controller.signal.throwIfAborted();
-          size += data.length;
-          check(size <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
-          digest.update(data); await plainFile.writeFile(data);
-        }
-        check(length === undefined || length === size, 'UPLOAD_LENGTH_MISMATCH', 400);
-        await plainFile.sync();
-      } finally { await plainFile.close(); }
-      const sha256 = digest.digest('hex');
-      let entry = entries.get(parts[1]);
-      if (entry) {
-        check(entry.stat.size === size && entry.stat.etag === `"vp-${sha256}"`, 'PENDING_UPLOAD_DIFFERS', 409);
-      } else {
-        check((await readdir(directory)).filter(name => name !== 'LOCK').length < 256, 'UPLOAD_WORKSPACE_BOUND', 507);
-        const id = `object-${randomBytes(16).toString('hex')}`;
-        const root = join(directory, id);
-        await mkdir(root, { mode: 0o700 }); await syncDirectory(directory);
-        const bundle = join(root, 'bundle');
-        const config = join(root, 'core.json');
-        const receipt = await sealOwnerUpload({ source: plain, space, name: parts[1], size, sha256, output: bundle }, { signal: controller.signal });
-        // The read budget covers ciphertext, including its encrypted metadata.
-        check(receipt.cipher_bytes <= maxFileBytes, 'UPLOAD_TOO_LARGE', 413);
-        await writeNew(config, { ...template, stateDirectory: join(root, 'journal') });
-        await sealPrivateCatalogEntries([{ segments: parts, bundle, config, size, sha256,
-          cipherSha256: receipt.cipher_sha256, cipherBytes: receipt.cipher_bytes, lastModified: null }],
-        join(root, 'catalog'), { signal: controller.signal });
-        await syncDirectory(root);
-        entry = await loadEntry(id);
+      if (!retainedOnly) {
+        stage = await mkdtemp(join(workDirectory, 'upload-body-'));
+        entry = await selectUpload(parts, body, length, stage, requestSignal);
       }
       active(requestSignal); controller.signal.throwIfAborted();
+      // A retained object from a maintenance-enabled build must keep its original authority.
+      check(await absent(join(entry.root, 'MAINTENANCE.json')) && await absent(join(entry.root, 'maintenance')),
+        'UPLOAD_MAINTENANCE_CHANGED');
+      const receipt = retainedOnly ? await retainedReceipt(entry, parts, controller.signal)
+        : await readPrivateJSON(join(entry.root, 'bundle/receipt.json'));
       const core = await storageFactory(join(entry.root, 'core.json'));
-      const receipt = await readPrivateJSON(join(entry.root, 'bundle/receipt.json'));
       const input = join(entry.root, 'bundle/file.pgp');
-      const planned = await absent(join(entry.root, 'journal'))
+      const planned = !retainedOnly && await absent(join(entry.root, 'journal'))
         ? await core.create({ input, sha256: receipt.cipher_sha256, alreadyEncrypted: true }, { signal: controller.signal })
         : await core.status({ signal: controller.signal });
       if (planned.local_process_joined !== true) cleanupFailed = true;
       check(planned.status === 'complete' && planned.local_process_joined === true, 'UPLOAD_PLAN_INCOMPLETE');
+      if (retainedOnly) check(planned.storage?.logical_ciphertext_bytes === receipt.cipher_bytes, 'PENDING_UPLOAD_DIFFERS');
       const deposited = await core.deposit({ input, alreadyEncrypted: true }, { signal: controller.signal });
       if (deposited.local_process_joined !== true) cleanupFailed = true;
       check(deposited.status === 'complete' && deposited.local_process_joined === true
@@ -195,6 +225,11 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
         busy = false; controller = null;
       }
     }
+  }
+  function track(operation) {
+    pending.add(operation);
+    operation.finally(() => pending.delete(operation)).catch(() => {});
+    return operation;
   }
   const backend = {
     ownerUploadSpace: space,
@@ -240,12 +275,8 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
         return disposing;
       } });
     },
-    put(parts, body, options) {
-      const operation = upload(parts, body, options);
-      pending.add(operation);
-      operation.finally(() => pending.delete(operation)).catch(() => {});
-      return operation;
-    },
+    put(parts, body, options) { return track(upload(parts, body, options)); },
+    resume(parts, options) { return track(upload(parts, null, options, true)); },
     close() {
       if (!closing) {
         closed = true; controller?.abort();

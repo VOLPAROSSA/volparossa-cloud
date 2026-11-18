@@ -54,7 +54,7 @@ def seal(output):
         CRYPTO.private_write(staging / 'recovery.key', key + b'\n')
         cipher = staging / 'catalog.pgp'
         with open(os.open(cipher, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), 'wb') as encrypted:
-            with CRYPTO.private_agent(parent) as home:
+            with FILE['private_agent'](parent) as home:
                 with CRYPTO.crypt_process(home, key, encrypt=True, output=encrypted, timeout_seconds=90) as process:
                     process.stdin.write(encoded)
                     process.stdin.close()
@@ -82,7 +82,7 @@ def decrypt(catalog):
         require(info.st_size == expected['cipher_bytes']
             and hashlib.file_digest(cipher, 'sha256').hexdigest() == expected['cipher_sha256'], 'CATALOG_IDENTITY_MISMATCH')
         cipher.seek(0)
-        with CRYPTO.private_agent(root.parent) as home:
+        with FILE['private_agent'](root.parent) as home:
             with CRYPTO.crypt_process(home, key[:-1], encrypt=False, output=subprocess.PIPE,
                     timeout_seconds=90, input_stream=cipher) as process:
                 encoded = process.stdout.read(MAX_BYTES + 1)
@@ -98,6 +98,8 @@ def main():
     commands.add_parser('seal').add_argument('--output', required=True)
     commands.add_parser('decrypt').add_argument('--catalog', required=True)
     args = parser.parse_args()
+    target = args.output if args.operation == 'seal' else args.catalog
+    os.chdir(FILE['directory'](Path(target).parent))
     value = seal(args.output) if args.operation == 'seal' else decrypt(args.catalog)
     print(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False))
 
