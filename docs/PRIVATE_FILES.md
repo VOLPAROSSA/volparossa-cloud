@@ -178,8 +178,8 @@ unchanged. This draft combines the current diagnostic policy with finite owner m
 the actual combined peer lifecycle remains unproved.
 
 The vendored SDK is byte-identical to the published Image draft merge
-`770a23fef01cb4cc69303a433b31b9df0d26b44e`, with all three source files bound by
-`third_party/volparossa-image-source.json`. Its helper and license bytes are unchanged.
+`21988efc1ba112a9840e0f052f4e4d0dc56a9d63`, with all three source files bound by
+`third_party/volparossa-image-source.json`. The Image snapshot helper includes its upstream owner-selected recovery-key reader. Cloud continues to use the helper’s supervised GnuPG process.
 The focused `test/storage-deposit-diagnostics.test.mjs` is designed to exercise
 the actual Cloud consumer, default SDK and joined synthetic Node child. It compares
 full default results and argv against a readable test-only copy of the original

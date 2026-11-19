@@ -1,14 +1,14 @@
 {
   "version": 1,
   "repository": "https://github.com/VOLPAROSSA/volparossa-image",
-  "revision": "770a23fef01cb4cc69303a433b31b9df0d26b44e",
+  "revision": "21988efc1ba112a9840e0f052f4e4d0dc56a9d63",
   "license": "GPL-3.0-only",
   "local_modifications": false,
   "files": {
     "scripts/immich_snapshot.py": {
       "local": "vendor/volparossa-image/immich_snapshot.py",
-      "bytes": 24955,
-      "sha256": "23528a0737cd0a51e88b58a7f61079b3c6aa0f19b96a1f55757a9da49718256f"
+      "bytes": 25820,
+      "sha256": "ecf98b1410cec1e0c954616a763a3ce74fb3a03f6f799c5e5f266edd09872e3c"
     },
     "src/core-storage.mjs": {
       "local": "vendor/volparossa-image/core-storage.mjs",
