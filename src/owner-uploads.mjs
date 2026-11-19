@@ -203,6 +203,11 @@ export async function openOwnerUploads({ directory, space, storageConfig, workDi
         entry = await selectUpload(parts, body, length, stage, requestSignal);
       }
       active(requestSignal); controller.signal.throwIfAborted();
+      if (!maintenance) {
+        // An unmanaged resume or PUT cannot take over an existing maintenance obligation.
+        check(await absent(join(entry.root, 'MAINTENANCE.json')) && await absent(join(entry.root, 'maintenance')),
+          'UPLOAD_MAINTENANCE_CHANGED');
+      }
       const receipt = retainedOnly ? await retainedReceipt(entry, parts, controller.signal)
         : await readPrivateJSON(join(entry.root, 'bundle/receipt.json'));
       // Persist and charge the entire finite archive ceiling before any peer

@@ -15,7 +15,7 @@ import { sealPrivateCatalogEntries } from '../src/private-catalog.mjs';
 import { openOwnerUploads } from '../src/owner-uploads.mjs';
 import { startPrivateDavServer } from '../src/private-dav-server.mjs';
 import { recoverySpaceId, recoveryResourceId } from '../src/private-resource-id.mjs';
-import { restorePrivateFile } from '../src/private-file.mjs';
+import { restorePrivateFile, sealOwnerUpload } from '../src/private-file.mjs';
 import { openUploadMaintenance } from '../src/storage-upload-maintenance.mjs';
 import { checkedSDK } from './fixtures/checked-sdk.mjs';
 
@@ -256,101 +256,131 @@ test('incomplete deposit stays invisible; explicit identical retry resumes same 
     assert.deepEqual(Buffer.from(await (await f.request(f.filePath('pending.txt'))).arrayBuffer()), BODY);
   });
 
-test('owner CLI resumes an original encrypted pending upload after restart without the browser source',
-  { timeout: 90000 }, async t => {
-    const f = await fixture(t, { withMaintenance: true });
-    const name = 'source-gone.txt', source = join(f.root, 'original-file.txt');
-    await writeFile(source, BODY, { mode: 0o600 });
-    await f.start(); f.failure = true;
-    const sdk = process.env.VOLPAROSSA_CLOUD_WEB_SDK && await checkedSDK(process.env.VOLPAROSSA_CLOUD_WEB_SDK);
-    const space = { id: recoverySpaceId(SPACE), webDavPath: `spaces/${recoverySpaceId(SPACE)}`, driveType: 'project' };
-    const sdkClient = () => sdk.webdav(f.origin, () => ({ Authorization: `Bearer ${TOKEN}` }));
-    if (sdk) {
-      await assert.rejects(sdkClient().putFileContents(space, { fileName: name, parentFolderId: recoveryResourceId([SPACE]),
-        content: await readFile(source, 'utf8') }));
-    } else {
-      assert.equal((await f.request(f.filePath(name), 'PUT', await readFile(source))).status, 503);
-    }
-    await rm(source);
-    const id = (await readdir(f.directory)).find(item => item.startsWith('object-'));
-    const root = join(f.directory, id), intent = await readFile(join(root, 'MAINTENANCE.json'));
-    const cipher = await readFile(join(root, 'bundle/file.pgp')), journal = await lstat(join(root, 'journal'));
-    const catalog = join(f.root, 'base-catalog'), config = join(f.root, 'service.json'), request = join(f.root, 'resume.json');
-    await sealPrivateCatalogEntries([], catalog);
-    const service = { version: 1, catalog, workDirectory: f.workDirectory, bearerToken: TOKEN, maxOpenBytes: 1024 ** 2,
-      ownerUploads: { directory: f.directory, space: SPACE, storageConfig: f.config.storageConfig }, storageMaintenance: f.policy };
-    await writeFile(config, JSON.stringify(service), { mode: 0o600 });
-    const select = (bearerToken = TOKEN, selectedName = name) => writeFile(request,
-      JSON.stringify({ version: 1, space: SPACE, name: selectedName, bearerToken }), { mode: 0o600 });
-    const resume = () => runCloud(['resume-upload', '--config', config, '--request', request], {
-      openMaintenance: (policy, options) => openUploadMaintenance(policy, { ...options, storageFactory: f.storageFactory }),
-      startServer: () => assert.fail('one-shot resume opened an HTTP listener'),
+async function seedCatalog(f, catalog) {
+  const name = 'baseline.txt', source = join(f.root, 'baseline-source'), bundle = join(f.root, 'baseline-bundle');
+  const bytes = Buffer.from('Synthetic previously imported file.');
+  await writeFile(source, bytes, { mode: 0o600 });
+  const receipt = await sealOwnerUpload({ source, space: 'Imported', name, size: bytes.length, sha256: hash(bytes), output: bundle });
+  await sealPrivateCatalogEntries([{ segments: ['Imported', name], bundle, config: f.config.storageConfig,
+    size: bytes.length, sha256: hash(bytes), cipherSha256: receipt.cipher_sha256,
+    cipherBytes: receipt.cipher_bytes, lastModified: null }], catalog);
+}
+
+for (const withMaintenance of [false, true]) {
+  const mode = withMaintenance ? 'finite maintenance' : 'unmanaged';
+  test(`owner CLI resumes an original encrypted pending upload after restart without the browser source (${mode})`,
+    { timeout: 90000 }, async t => {
+      const f = await fixture(t, { withMaintenance });
+      const name = 'source-gone.txt', source = join(f.root, 'original-file.txt');
+      await writeFile(source, BODY, { mode: 0o600 });
+      await f.start(); f.failure = true;
+      const sdk = process.env.VOLPAROSSA_CLOUD_WEB_SDK && await checkedSDK(process.env.VOLPAROSSA_CLOUD_WEB_SDK);
+      const space = { id: recoverySpaceId(SPACE), webDavPath: `spaces/${recoverySpaceId(SPACE)}`, driveType: 'project' };
+      const sdkClient = () => sdk.webdav(f.origin, () => ({ Authorization: `Bearer ${TOKEN}` }));
+      if (sdk) {
+        await assert.rejects(sdkClient().putFileContents(space, { fileName: name, parentFolderId: recoveryResourceId([SPACE]),
+          content: await readFile(source, 'utf8') }));
+      } else {
+        assert.equal((await f.request(f.filePath(name), 'PUT', await readFile(source))).status, 503);
+      }
+      await rm(source);
+      const id = (await readdir(f.directory)).find(item => item.startsWith('object-'));
+      const root = join(f.directory, id);
+      const intent = withMaintenance ? await readFile(join(root, 'MAINTENANCE.json')) : null;
+      const cipher = await readFile(join(root, 'bundle/file.pgp')), journal = await lstat(join(root, 'journal'));
+      const catalog = join(f.root, 'base-catalog'), config = join(f.root, 'service.json'), request = join(f.root, 'resume.json');
+      if (withMaintenance) await sealPrivateCatalogEntries([], catalog);
+      else await seedCatalog(f, catalog);
+      const service = { version: 1, catalog, workDirectory: f.workDirectory, bearerToken: TOKEN, maxOpenBytes: 1024 ** 2,
+        ownerUploads: { directory: f.directory, space: SPACE, storageConfig: f.config.storageConfig } };
+      if (withMaintenance) service.storageMaintenance = f.policy;
+      await writeFile(config, JSON.stringify(service), { mode: 0o600 });
+      const select = (bearerToken = TOKEN, selectedName = name) => writeFile(request,
+        JSON.stringify({ version: 1, space: SPACE, name: selectedName, bearerToken }), { mode: 0o600 });
+      const resume = () => runCloud(['resume-upload', '--config', config, '--request', request], {
+        openMaintenance: (policy, options) => openUploadMaintenance(policy, { ...options, storageFactory: f.storageFactory }),
+        openUploads: (settings, options) => openOwnerUploads(settings, { storageFactory: f.storageFactory, ...options }),
+        startServer: () => assert.fail('one-shot resume opened an HTTP listener'),
+      });
+      await select('synthetic-wrong-token');
+      await assert.rejects(resume(), { code: 'UNAUTHORIZED' });
+      await select();
+      await assert.rejects(resume(), { code: 'UPLOAD_WORKSPACE_BUSY' });
+      await f.stop();
+      await select(TOKEN, 'another.txt');
+      await assert.rejects(resume(), { code: 'PENDING_UPLOAD_NOT_FOUND' });
+      await select();
+      await assert.rejects(resume(), { code: 'UPLOAD_STORAGE_INCOMPLETE' });
+      await assert.rejects(lstat(join(root, 'READY.json')), { code: 'ENOENT' });
+      assert.equal(f.calls.filter(([op]) => op === 'enroll').length, 0);
+      const configPath = join(root, 'core.json'), originalConfig = await readFile(configPath);
+      await writeFile(configPath, JSON.stringify({ ...JSON.parse(originalConfig), stateDirectory: f.directory }));
+      await assert.rejects(resume(), { code: 'UPLOAD_AUTHORITY_CHANGED' });
+      await writeFile(configPath, originalConfig);
+      const cipherPath = join(root, 'bundle/file.pgp'), changed = Buffer.from(cipher);
+      changed[0] ^= 1;
+      await writeFile(cipherPath, changed);
+      await assert.rejects(resume(), { code: 'CIPHER_IDENTITY_MISMATCH' });
+      const receiptPath = join(root, 'bundle/receipt.json'), originalReceipt = await readFile(receiptPath);
+      await writeFile(receiptPath, JSON.stringify({ ...JSON.parse(originalReceipt), cipher_sha256: hash(changed) }));
+      await assert.rejects(resume(), { code: 'FILE_VERSION_CHANGED' });
+      await writeFile(receiptPath, originalReceipt);
+      await writeFile(cipherPath, cipher);
+      await fs.rename(join(root, 'journal'), join(root, 'saved-journal'));
+      try { await assert.rejects(resume(), { code: 'PENDING_UPLOAD_JOURNAL_REQUIRED' }); }
+      finally { await fs.rename(join(root, 'saved-journal'), join(root, 'journal')); }
+      if (withMaintenance) {
+        const enrollment = join(root, 'maintenance');
+        await mkdir(enrollment, { mode: 0o700 });
+        await writeFile(join(enrollment, 'enrollment.json'), '{}', { mode: 0o600 });
+        await assert.rejects(resume(), { code: 'MAINTENANCE_ADMISSION_UNCERTAIN' });
+        await rm(enrollment, { recursive: true }); // Only the deliberately invalid test witness.
+      } else {
+        const intent = join(root, 'MAINTENANCE.json'), enrollment = join(root, 'maintenance');
+        await writeFile(intent, '{}', { mode: 0o600 });
+        await assert.rejects(resume(), { code: 'UPLOAD_MAINTENANCE_CHANGED' });
+        await f.start();
+        assert.equal((await f.request(f.filePath(name), 'PUT', BODY)).status, 503);
+        await f.stop();
+        await rm(intent);
+        await mkdir(enrollment, { mode: 0o700 });
+        await assert.rejects(resume(), { code: 'UPLOAD_MAINTENANCE_CHANGED' });
+        await rm(enrollment, { recursive: true });
+      }
+      assert.equal(f.calls.filter(([op]) => op === 'deposit').length, 2);
+      f.failure = false;
+      const expected = { version: 1, kind: 'volparossa-cloud-owner-upload-resume', state: 'ready' };
+      assert.deepEqual(await resume(), expected);
+      const calls = f.calls.map(([op]) => op);
+      assert.equal(calls.filter(op => op === 'create').length, 1);
+      assert.equal(calls.filter(op => op === 'deposit').length, 3);
+      assert.equal(calls.filter(op => op === 'enroll').length, withMaintenance ? 1 : 0);
+      assert.deepEqual(await resume(), expected);
+      assert.deepEqual(f.calls.map(([op]) => op), calls);
+      assert.equal((await lstat(join(root, 'journal'))).ino, journal.ino);
+      assert.deepEqual(await readFile(join(root, 'bundle/file.pgp')), cipher);
+      if (withMaintenance) assert.deepEqual(await readFile(join(root, 'MAINTENANCE.json')), intent);
+      assert.deepEqual((await readdir(f.directory)).filter(item => item !== 'LOCK'), [id]);
+      await f.start();
+      if (sdk) {
+        const files = await sdkClient().listFiles(space);
+        assert.deepEqual(files.children.map(file => [file.name, file.id]), [[name, recoveryResourceId([SPACE, name])]]);
+      }
+      const response = await f.request(f.filePath(name));
+      assert.equal(response.status, 200);
+      assert.deepEqual(Buffer.from(await response.arrayBuffer()), BODY);
+      if (withMaintenance) assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
+      await f.stop();
+      assert.deepEqual(await readdir(f.workDirectory), []);
     });
-    await select('synthetic-wrong-token');
-    await assert.rejects(resume(), { code: 'UNAUTHORIZED' });
-    await select();
-    await assert.rejects(resume(), { code: 'UPLOAD_WORKSPACE_BUSY' });
-    await f.stop();
-    await select(TOKEN, 'another.txt');
-    await assert.rejects(resume(), { code: 'PENDING_UPLOAD_NOT_FOUND' });
-    await select();
-    await assert.rejects(resume(), { code: 'UPLOAD_STORAGE_INCOMPLETE' });
-    await assert.rejects(lstat(join(root, 'READY.json')), { code: 'ENOENT' });
-    assert.equal(f.calls.filter(([op]) => op === 'enroll').length, 0);
-    const configPath = join(root, 'core.json'), originalConfig = await readFile(configPath);
-    await writeFile(configPath, JSON.stringify({ ...JSON.parse(originalConfig), stateDirectory: f.directory }));
-    await assert.rejects(resume(), { code: 'UPLOAD_AUTHORITY_CHANGED' });
-    await writeFile(configPath, originalConfig);
-    const cipherPath = join(root, 'bundle/file.pgp'), changed = Buffer.from(cipher);
-    changed[0] ^= 1;
-    await writeFile(cipherPath, changed);
-    await assert.rejects(resume(), { code: 'CIPHER_IDENTITY_MISMATCH' });
-    const receiptPath = join(root, 'bundle/receipt.json'), originalReceipt = await readFile(receiptPath);
-    await writeFile(receiptPath, JSON.stringify({ ...JSON.parse(originalReceipt), cipher_sha256: hash(changed) }));
-    await assert.rejects(resume(), { code: 'FILE_VERSION_CHANGED' });
-    await writeFile(receiptPath, originalReceipt);
-    await writeFile(cipherPath, cipher);
-    await fs.rename(join(root, 'journal'), join(root, 'saved-journal'));
-    try { await assert.rejects(resume(), { code: 'PENDING_UPLOAD_JOURNAL_REQUIRED' }); }
-    finally { await fs.rename(join(root, 'saved-journal'), join(root, 'journal')); }
-    const enrollment = join(root, 'maintenance');
-    await mkdir(enrollment, { mode: 0o700 });
-    await writeFile(join(enrollment, 'enrollment.json'), '{}', { mode: 0o600 });
-    await assert.rejects(resume(), { code: 'MAINTENANCE_ADMISSION_UNCERTAIN' });
-    await rm(enrollment, { recursive: true }); // Only the deliberately invalid test witness.
-    assert.equal(f.calls.filter(([op]) => op === 'deposit').length, 2);
-    f.failure = false;
-    const expected = { version: 1, kind: 'volparossa-cloud-owner-upload-resume', state: 'ready' };
-    assert.deepEqual(await resume(), expected);
-    const calls = f.calls.map(([op]) => op);
-    assert.equal(calls.filter(op => op === 'create').length, 1);
-    assert.equal(calls.filter(op => op === 'deposit').length, 3);
-    assert.equal(calls.filter(op => op === 'enroll').length, 1);
-    assert.deepEqual(await resume(), expected);
-    assert.deepEqual(f.calls.map(([op]) => op), calls);
-    assert.equal((await lstat(join(root, 'journal'))).ino, journal.ino);
-    assert.deepEqual(await readFile(join(root, 'bundle/file.pgp')), cipher);
-    assert.deepEqual(await readFile(join(root, 'MAINTENANCE.json')), intent);
-    assert.deepEqual((await readdir(f.directory)).filter(item => item !== 'LOCK'), [id]);
-    await f.start();
-    if (sdk) {
-      const files = await sdkClient().listFiles(space);
-      assert.deepEqual(files.children.map(file => [file.name, file.id]), [[name, recoveryResourceId([SPACE, name])]]);
-    }
-    const response = await f.request(f.filePath(name));
-    assert.equal(response.status, 200);
-    assert.deepEqual(Buffer.from(await response.arrayBuffer()), BODY);
-    assert.equal((await f.maintenance.status()).reserved_archive_ceiling_bytes, f.policy.perArchiveMaxChargedBytes);
-    await f.stop();
-    assert.deepEqual(await readdir(f.workDirectory), []);
-  });
+}
 
 test('unmanaged retained upload resumes without migration and repeated owner CLI process has no storage side effect',
   { timeout: 90000 }, async t => {
     const f = await fixture(t);
     const name = 'legacy-pending.txt', catalog = join(f.root, 'base-catalog');
     const config = join(f.root, 'service.json'), request = join(f.root, 'resume.json');
-    await sealPrivateCatalogEntries([], catalog);
+    await seedCatalog(f, catalog);
     await writeFile(config, JSON.stringify({ version: 1, catalog, workDirectory: f.workDirectory, bearerToken: TOKEN,
       ownerUploads: { directory: f.directory, space: SPACE, storageConfig: f.config.storageConfig } }), { mode: 0o600 });
     await writeFile(request, JSON.stringify({ version: 1, space: SPACE, name, bearerToken: TOKEN }), { mode: 0o600 });
