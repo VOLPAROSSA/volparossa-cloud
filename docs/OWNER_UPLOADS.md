@@ -21,9 +21,31 @@ Original Files Upload / authenticated DAV PUT
 
 ## Explicit setup
 
-Keep the existing [read-service configuration](OFFLINE_READ.md), selected catalog
-and owner token. Add an upload space whose name does not collide with an imported
-space:
+Use the [read-service configuration](OFFLINE_READ.md), an encrypted catalog and
+an owner token. An existing imported catalog remains usable. For a new upload-only
+workspace, no previous import is required: save the following explicit selection
+as a mode-0600 file inside an owner-only directory:
+
+```json
+{"version": 1, "files": []}
+```
+
+Create a fresh catalog with the existing CLI, using your actual private paths:
+
+```sh
+node scripts/cloud-catalog.mjs create \
+  --selection /owner/private/empty-selection.json \
+  --catalog /owner/private/catalog \
+  --work-directory /owner/private/work
+```
+
+The parent and work directories must already be mode 0700; the catalog target
+must not exist. This produces the same authenticated encrypted catalog, private
+recovery key and receipt as a nonempty selection, with zero imported files. Set
+the service's `catalog` to that path. A missing or corrupted catalog is still an
+error, never an instruction to create a replacement or discard previous data.
+
+Add an upload space whose name does not collide with an imported space:
 
 ```json
 "ownerUploads": {
@@ -58,6 +80,8 @@ its two-minute default. Explicit service deadlines may still cancel an upload.
 ## Publication, retry and recovery
 
 `PUT` returns **201 only after confirmed storage and durable catalog publication**.
+When the version-2 maintenance policy below is configured, successful enrollment
+and registration of its maintenance process are also required before publication.
 The owner directory holds opaque object names, private recovery bundles, encrypted
 single-file catalogs and core journals. File names and plaintext hashes remain
 inside authenticated encryption, not filenames or public receipts. The new
@@ -99,18 +123,20 @@ node scripts/cloud-serve.mjs resume-upload \
 
 The command authenticates the request, opens the encrypted catalog, checks its
 ciphertext hash, byte length and paths, and verifies the original journal and
-current storage template. Core continues its per-provider journals with the
-retained ciphertext. The command publishes READY after Core confirms redundant
-storage, then closes the workspace. Restart the recovery service to list and download the file in Files.
+current storage template. An existing maintenance intent must match the owner's
+policy, remaining limits and grants. Core continues its signed per-provider
+journals with the retained ciphertext. The command publishes READY after
+confirmed redundant storage and any required enrollment. It then closes the
+workspace. Restart the recovery service to list and download the file in Files.
 Repeating the command for an already published name reports `ready` and makes
 no further deposit. The command's output contains only a bounded status or
 error code. The private request contains an owner credential.
 
 Previously created pending owner uploads use the same on-disk format. A busy
-workspace, changed authority, missing journal, altered ciphertext or incomplete
-storage leaves the operation unconfirmed. An archive carrying a maintenance intent
-or enrollment must be completed by the build that manages that authority. Restore
-the original configuration and required access before retrying.
+workspace, changed authority, missing journal, altered ciphertext, expired
+policy or incomplete storage leaves the operation unconfirmed. Existing
+reservations and charges stay recorded. Restore the original configuration
+and required access before trying the same operation again.
 
 If the upload was interrupted before the encrypted catalog was published, its
 opaque local staging directory can remain on disk. At that point this Cloud
@@ -138,7 +164,87 @@ upload staging, ciphertext, restore staging and owner journals use additional lo
 space. Forced process termination may leave private staging; this slice does not
 claim secure erasure or automatic abandoned-operation retirement.
 
+## Automatic maintenance under finite authority
+
+New uploads can enter core-managed maintenance without a separate enrollment
+command for each file. This is an explicit configuration choice, not permission
+to create unlimited storage obligations. It requires the core's
+`--authorization-expires-at` enrollment support and the pinned Image bridge;
+older binaries are not substitutes.
+
+In the normal service configuration, set `storageMaintenance` to an object with
+**all** the following fields. The outer service configuration remains version 1;
+only this nested policy is version 2. Unknown fields are rejected.
+
+| Field | Meaning and bounds |
+| --- | --- |
+| `version` | Exactly `2`. |
+| `expiresAt` | Owner-selected absolute Unix time in seconds; new admission requires it to be in the future and no more than 31 days away. |
+| `maxSessions` | Shared archive limit, 1–8, including existing enrollments and pending uploads. |
+| `maxChargedBytes` | Shared ceiling for reserved archive authority, at most 8 × 512 GiB. |
+| `perArchiveMaxChargedBytes` | Maximum authorized charge per new archive, at most 512 GiB and no greater than the shared ceiling; must cover at least two encrypted copies. Leave room for repair obligations too. |
+| `fromProviderKey` | One of the upload template's explicit provider keys, as 64 lowercase hexadecimal characters; the source selected for core-managed replacement. |
+| `lifetimeSeconds` | Requested storage-lease lifetime, 1–2,678,400 seconds; provider grants and core checks still apply. |
+| `renewBeforeSeconds` | Core renewal window, 1–2,678,400 seconds. |
+| `maximumTurnBytes` | Core maintenance work limit per turn, 1–134,217,728 bytes. |
+| `existing` | Array of up to eight `{ "config": "/absolute/private/config.json", "enrollment": "/absolute/private/enrollment" }` references; may be empty. Paths must be canonical and distinct. |
+
+Before creating or depositing an archive, the service durably records a private
+maintenance intent and reserves its **full authorized ceiling**, not just the
+bytes currently stored. Existing enrollments and pending uploads consume the
+same budget. This admission reservation is not a second physical-storage ledger,
+a disk quota or proof of reciprocal contribution: the core owns actual accounting,
+placement, redundancy and repair.
+
+The intent binds the original archive, configuration, provider grants, charge
+ceiling and absolute deadline. A retry uses that same intent and journal. After
+deposit, the service checks the core-reported charge bound, enrolls the archive,
+verifies the retained signed authority and starts maintenance through the same
+adapter used by foreground reads. A missing or unconfirmed enrollment leaves the
+upload pending; it cannot receive a successful creation response.
+
+Restart loads retained obligations before starting maintenance or listening for
+requests. It neither extends the original deadline nor silently completes an
+interrupted upload: completing that upload still requires an identical `PUT`.
+Unknown or unverifiable obligations block new admission rather than freeing
+capacity. Already committed files remain readable when maintenance authority
+expires, subject to their existing read rights and available storage.
+
+The existing list form of `storageMaintenance` still supervises only previously
+enrolled archives. Neither form refreshes provider grants automatically. This
+candidate also does **not** automatically release reservations when authority
+expires or storage is retired; safe obligation retirement remains separate work.
+The service supervises maintenance while running, not after it has been stopped.
+
 ## Evidence and remaining scope
+
+### Owner upload and recovery on 18 November 2026
+
+The original OpenCloud Files/Uppy interface uploaded a 262,145-byte synthetic file
+and received HTTP 201. The trial stopped the source DAV server, removed both local
+ciphertexts and stopped one of three storage providers. A fresh service and browser
+then downloaded the uploaded file twice and verified its contents. Two restores
+of the baseline file also succeeded. The Core retired all 16 fragment copies with
+zero final payload charge. Cleanup left zero owned topology objects, and the
+disposable guest's root network-state snapshots matched. The result reached
+`cloud-private-upload-complete` on Core `94ba2fb8b3e55d4aa0ab8260333c8b080e6fa58c`
+and Cloud `178592a3881d49f839f7716a154f7ef446ecbda5`. [Passed run 44374814775](https://github.com/VOLPAROSSA/volparossa/actions/runs/44374814775)
+
+The preceding run stopped during `baseline_import`, before the browser upload, on
+Core `0b4d2481f2ffbd3c293c068069bb3ddfc3b7ff8d` and Cloud
+`998bf2d46ba51ba904500e4f223d5f7d200092dc`. Its receipt records the failure kind
+as `unclassified`. A separate process test reproduced a permissions error when
+the crypto helper tried to return to an inherited working directory. Both corrected
+helper entrypoints start in an owner-private directory. [Failed run 44368961729](https://github.com/VOLPAROSSA/volparossa/actions/runs/44368961729)
+
+Independent replay of the passing report and evidence validators succeeded.
+The artifact ZIP SHA-256 is `32e6c9459f2e609bca870e29f215d954ece624e0b06966878c59dcdf524adb8b`.
+The SHA-256 of `cloud-private-upload-smoke.json` is
+`e1b2faee4cda1ede8a7b22ae5cddd5fa6c4456dba99fe4405813ea9977729eba`.
+Cross-device recovery, automatic repair and shared-account synchronization still
+require separate trials. [Acceptance artifact 14461289951](https://github.com/VOLPAROSSA/volparossa/actions/runs/44374814775/artifacts/14461289951)
+
+### Earlier owner upload and recovery trial
 
 The joined [original Files upload and peer-recovery trial 37218270756](https://github.com/VOLPAROSSA/volparossa/actions/runs/37218270756)
 **passes**, attempt 1, for Cloud
@@ -179,6 +285,26 @@ this service. Only the storage-provider boundary is an explicit in-memory
 core-contract fixture. The updated patch applies to pinned OpenCloud Web8 source.
 Those local checks alone are not peer evidence; the joined trial above supplies
 the separately verified live upload/recovery result.
+
+The new version-2 maintenance policy passes **50 component checks** across the
+upload, maintenance, service and private-file suites. These include actual
+loopback HTTP and GPG, enrollment-before-publication, retained reservations,
+restart, expiry, tampering and cancellation. Both real pinned SDK variants also
+pass: ordinary uploads and uploads with finite automatic enrollment. The latter
+checks enrollment, the original deadline and reserved ceiling when PUT returns,
+then refreshes the drive, lists the file, verifies its decrypted body and refuses
+overwrite. These SDK checks require explicitly staged, verified source bytes;
+ordinary runs without that staging skip them.
+
+Their core boundary is synthetic. The earlier live upload trial did not run this
+new policy; a joined real-core upload → automatic enrollment → repair → restarted
+read → verified retirement trial remains required.
+
+Three further checks pass for empty-catalog startup: actual CLI creation and
+inspection with GPG, unchanged selection bounds and refusal of missing/tampered
+catalogs, and the real Cloud service's first authenticated HTTP upload followed by
+a cold restart/read after removing local ciphertext. The latter preserves the
+original enrollment and uses the same explicitly synthetic core boundary.
 
 The prepared disposable-guest driver `scripts/smoke_owner_upload_ui.py` uses the
 original Files file input and Uppy upload, then reloads and reauthenticates. Its
@@ -260,6 +386,6 @@ asserted. This correction does not bypass any cleanup or upload acceptance check
 the later passing trial is recorded above, without reclassifying this failure.
 
 Owner keys/catalogs/journals still live on the owner's device. Cross-device recovery,
-shared accounts, concurrent editors, automatic repair/renewal and general writable
-synchronization remain separate work. Neither the read-only trials nor the new
-upload/recovery trial prove full server-independent OpenCloud operation.
+shared accounts, concurrent editors, proven integrated maintenance, grant refresh
+and general writable synchronization remain separate work. Neither the read-only
+trials nor the upload/recovery trial prove full server-independent OpenCloud operation.
