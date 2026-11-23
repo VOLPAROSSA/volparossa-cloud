@@ -1,5 +1,11 @@
 # VOLPAROSSA Cloud
 
+Follow the [shared development workflow](https://github.com/VOLPAROSSA/volparossa/blob/main/docs/development/CODEX_WORKFLOW.md) for Codex, OpenCode and other coding agents.
+Start with the user's task and the relevant part of the [README](README.md).
+Choose available models, reasoning effort, tools and any delegation according
+to the task's complexity, risk and cost. Use targeted checks. Run builds and
+runtime trials on approved disposable hosted runners.
+
 - Integrate OpenCloud with the shared VOLPAROSSA core; do not create a separate
   peer scheduler, storage ledger, identity authority or redundancy setting.
 - Preserve ordinary OpenCloud accounts, file access and sharing. Offline access
@@ -16,10 +22,10 @@
   checks. Prove origin-off access with the real supported client before claiming
   it works without the original server. Never replace such evidence with a mock-only claim.
 - Do not change host networking. Use synthetic data for tests; reading real user
-  accounts/files requires a specific request. Task-scoped, pinned and verified
-  workspace-local acquisition, builds and isolated tests are normal authorized
-  development steps, with no separate approval for each download. Do not use
-  untrusted executable downloads. Global installation or permanent changes
-  outside the workspace require explicit user approval.
+  accounts/files requires a specific request. Task-scoped acquisition of pinned
+  and verified inputs is authorized within the workspace. Run builds and isolated
+  tests on approved disposable hosted runners. Do not use untrusted executable
+  downloads. Global installation or permanent changes outside the workspace
+  require explicit user approval.
 - Pin upstream source and preserve component licenses. Original integration
   code is GPL-3.0-only; OpenCloud server and web components have distinct licenses.
