@@ -65,7 +65,9 @@ function modified(value) {
   return Number.isFinite(time) ? new Date(time).toUTCString() : null;
 }
 function validateSelection(selection) {
-  check(Array.isArray(selection) && selection.length >= 1 && selection.length <= 256, 'INVALID_SELECTION');
+  // An explicitly created empty encrypted catalog bootstraps owner uploads;
+  // missing catalogs still fail through the ordinary authenticated open path.
+  check(Array.isArray(selection) && selection.length <= 256, 'INVALID_SELECTION');
   const selected = selection.map(value => {
     check(object(value, ['segments', 'bundle', 'config']), 'INVALID_SELECTION');
     return { segments: segments(value.segments, true), bundle: absolute(value.bundle), config: absolute(value.config) };

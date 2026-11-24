@@ -128,6 +128,19 @@ from an OpenCloud account; it grants no upstream identity, write or sharing righ
 The catalog and per-file recovery keys/journals currently remain on the owner's
 device; second-device recovery remains work in progress.
 
+The service can also supervise [explicit finite storage enrollments](docs/PRIVATE_CATALOG.md#sharing-the-owners-maintenance-process)
+through the shared Image adapter. An optional [bounded upload policy](docs/OWNER_UPLOADS.md#automatic-maintenance-under-finite-authority)
+adds automatic enrollment of new uploads, with durable capacity reservations and
+an absolute authority deadline that restart cannot extend. Foreground access
+reuses the same adapter and joins maintenance before taking the archive lock.
+These bindings have lifecycle/contract checks; their combined protected-peer
+maintenance proof and automatic grant refresh remain unfinished.
+
+A new owner-upload workspace can start with an explicitly created, encrypted
+empty catalog; importing an existing file first is no longer required. Missing
+or damaged catalogs still fail authentication rather than starting an empty
+replacement service.
+
 [Run the private read service and see its evidence boundaries →](docs/OFFLINE_READ.md)
 
 [Build and open the original Files recovery interface →](docs/RECOVERY_WEB.md)
